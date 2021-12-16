@@ -1,11 +1,12 @@
-use bevy::prelude::*;
 use std::collections::HashMap;
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum WallType {
     CornerBottomLeft,
+    CornerBottomLeftEnclosed,
     CornerBottomLeftSolid,
     CornerBottomRight,
+    CornerBottomRightEnclosed,
     CornerBottomRightSolid,
     CornerTopLeft,
     CornerTopLeftSolid,
@@ -19,16 +20,14 @@ pub enum WallType {
     WallRightSolid,
     WallTopHollow,
     WallTopSolid,
-    CornerBottomLeftEnclosed,
-    CornerBottomRightEnclosed,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum BoardTile {
     Empty,
-    Wall(WallType),
     Dot,
-    Fruit
+    Fruit,
+    Wall(WallType),
 }
 
 pub struct Board {
@@ -42,7 +41,7 @@ impl Board {
         let key_map = HashMap::from([
             ('_', BoardTile::Empty),
             ('.', BoardTile::Dot),
-            ('f', BoardTile::Fruit),
+            ('/', BoardTile::Fruit),
             ('<', BoardTile::Wall(WallType::CornerBottomLeft)),
             ('>', BoardTile::Wall(WallType::CornerBottomRight)),
             ('^', BoardTile::Wall(WallType::CornerTopLeft)),
@@ -76,7 +75,7 @@ impl Board {
             ['d', '.', '.', '.', '.', '.', '.', 'e', 'c', '.', '.', '.', '.', 'e', 'c', '.', '.', '.', '.', 'e', 'c', '.', '.', '.', '.', '.', '.', 'f'],
             ['l', 'b', 'b', 'b', 'b', '<', '.', 'e', 'v', 'a', 'a', '<', '.', 'e', 'c', '.', '>', 'a', 'a', '^', 'c', '.', '>', 'b', 'b', 'b', 'b', 'k'],
             ['_', '_', '_', '_', '_', 'd', '.', 'e', '>', 'g', 'g', '^', '.', 'v', '^', '.', 'v', 'g', 'g', '<', 'c', '.', 'f', '_', '_', '_', '_', '_'],
-            ['_', '_', '_', '_', '_', 'd', '.', 'e', 'c', '.', '.', '.', '.', '.', '.', '.', '.', '.', '.', 'e', 'c', '.', 'f', '_', '_', '_', '_', '_'],
+            ['_', '_', '_', '_', '_', 'd', '.', 'e', 'c', '.', '.', '.', '.', '_', '_', '.', '.', '.', '.', 'e', 'c', '.', 'f', '_', '_', '_', '_', '_'],
             ['_', '_', '_', '_', '_', 'd', '.', 'e', 'c', '.', '>', 'b', 'b', '_', '_', 'b', 'b', '<', '.', 'e', 'c', '.', 'f', '_', '_', '_', '_', '_'],
             ['h', 'h', 'h', 'h', 'h', '^', '.', 'v', '^', '.', 'f', '_', '_', '_', '_', '_', '_', 'd', '.', 'v', '^', '.', 'v', 'h', 'h', 'h', 'h', 'h'],
             ['.', '.', '.', '.', '.', '.', '.', '.', '.', '.', 'f', '_', '_', '_', '_', '_', '_', 'd', '.', '.', '.', '.', '.', '.', '.', '.', '.', '.'],
@@ -88,7 +87,7 @@ impl Board {
             ['d', '.', '.', '.', '.', '.', '.', '.', '.', '.', '.', '.', '.', 'e', 'c', '.', '.', '.', '.', '.', '.', '.', '.', '.', '.', '.', '.', 'f'],
             ['d', '.', '>', 'a', 'a', '<', '.', '>', 'a', 'a', 'a', '<', '.', 'e', 'c', '.', '>', 'a', 'a', 'a', '<', '.', '>', 'a', 'a', '<', '.', 'f'],
             ['d', '.', 'v', 'g', '<', 'c', '.', 'v', 'g', 'g', 'g', '^', '.', 'v', '^', '.', 'v', 'g', 'g', 'g', '^', '.', 'e', '>', 'g', '^', '.', 'f'],
-            ['d', '.', '.', '.', 'e', 'c', '.', '.', '.', '.', '.', '.', '.', '.', '.', '.', '.', '.', '.', '.', '.', '.', 'e', 'c', '.', '.', '.', 'f'],
+            ['d', '.', '.', '.', 'e', 'c', '.', '.', '.', '.', '.', '.', '.', '_', '_', '.', '.', '.', '.', '.', '.', '.', 'e', 'c', '.', '.', '.', 'f'],
             ['v', 'a', '<', '.', 'e', 'c', '.', '>', '<', '.', '>', 'a', 'a', 'a', 'a', 'a', 'a', '<', '.', '>', '<', '.', 'e', 'c', '.', '>', 'a', '^'],
             ['>', 'g', '^', '.', 'v', '^', '.', 'e', 'c', '.', 'v', 'g', 'g', '<', '>', 'g', 'g', '^', '.', 'e', 'c', '.', 'v', '^', '.', 'v', 'g', '<'],
             ['d', '.', '.', '.', '.', '.', '.', 'e', 'c', '.', '.', '.', '.', 'e', 'c', '.', '.', '.', '.', 'e', 'c', '.', '.', '.', '.', '.', '.', 'f'],
@@ -115,17 +114,12 @@ impl Board {
         }
     }
 
-    pub fn get_at(&self, i: usize, j: usize) -> Option<BoardTile> {
+    pub fn try_get(&self, i: usize, j: usize) -> Option<BoardTile> {
         if self.indeces_valid(i, j) {
             Some(self.matrix[i][j])
         } else {
             None
         }
-    }
-
-    pub fn set_at(&mut self, i: usize, j: usize, val: BoardTile) {
-        self.validate_indeces(i, j);
-        self.matrix[i][j] = val;
     }
 
     pub fn width(&self) -> usize {
@@ -146,7 +140,15 @@ impl Board {
 
     pub fn indeces_to_coordinates(&self, i: usize, j: usize) -> (f32, f32) {
         self.validate_indeces(i, j);
-        (j as f32, (self.height() - i - 1) as f32)
+        let x = j as f32 * self.cell_size + self.offset;
+        let y = (self.height() - i - 1) as f32 * self.cell_size + self.offset;
+        (x, y)
+    }
+
+    pub fn coordinates_to_indeces(&self, x: f32, y: f32) -> (usize, usize) {
+        let i = ((self.offset - y) / self.cell_size + self.height() as f32 - 1.) as usize;
+        let j = ((x - self.offset) / self.cell_size) as usize;
+        (i, j)
     }
 
     fn validate_indeces(&self, i: usize, j: usize) {
