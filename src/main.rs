@@ -1,6 +1,7 @@
 mod board;
 mod ben;
 mod enums;
+mod dot;
 
 use std::collections::HashMap;
 use bevy::{
@@ -10,6 +11,7 @@ use bevy::{
 use board::{Board, BoardTile, WallType};
 use ben::{Ben, BenBundle, BenAnimationTimer, BenSpeed, BenDirection};
 use enums::Direction;
+use dot::{Dot, DotBundle, DotCoordinates};
 
 struct WallMaterials {
     material_dict: HashMap<WallType, Handle<ColorMaterial>> 
@@ -39,6 +41,7 @@ fn main() {
         .add_system(ben_animation_system.system())
         .add_system(ben_movement_system.system())
         .add_system(ben_controller_system.system())
+        .add_system(ben_eating_system.system())
         .add_plugins(DefaultPlugins)
         .run();
 }
@@ -88,6 +91,7 @@ fn setup(
             let (x, y) = board.indeces_to_coordinates(i, j);
             let material: Handle<ColorMaterial>;
             let scale_factor: f32;
+            let mut is_dot = false;
             match curr_tile {
                 BoardTile::Empty => continue,
                 BoardTile::Wall(wall_type) => {
@@ -97,6 +101,7 @@ fn setup(
                 BoardTile::Dot => {
                     material = dot_material_handle.clone();
                     scale_factor = 1.75; 
+                    is_dot = true;
                 },
                 BoardTile::Fruit => {
                     material = dot_material_handle.clone();
@@ -105,16 +110,33 @@ fn setup(
             }
 
             let scale = Vec3::new(1./scale_factor, 1./scale_factor, 1.);
-            commands.spawn_bundle(SpriteBundle {
-                material,
-                sprite: Sprite::new(Vec2::new(board.cell_size() as f32, board.cell_size() as f32)),
-                transform: Transform {
-                    translation: Vec3::new(x,y,1.),
-                    scale,
+            if is_dot {
+                commands.spawn_bundle(DotBundle {
+                    coordinates: DotCoordinates(x, y),
+                    sprite_bundle: SpriteBundle {
+                        material,
+                        sprite: Sprite::new(Vec2::new(board.cell_size() as f32, board.cell_size() as f32)),
+                        transform: Transform {
+                            translation: Vec3::new(x,y,2.),
+                            scale,
+                            ..Default::default()
+                        },
+                        ..Default::default()
+                    },
                     ..Default::default()
-                },
-                ..Default::default()
-            });
+                });
+            } else {
+                commands.spawn_bundle(SpriteBundle {
+                    material,
+                    sprite: Sprite::new(Vec2::new(board.cell_size() as f32, board.cell_size() as f32)),
+                    transform: Transform {
+                        translation: Vec3::new(x,y,2.),
+                        scale,
+                        ..Default::default()
+                    },
+                    ..Default::default()
+                });
+            }
         }
     }
     commands.insert_resource(wall_materials);
@@ -144,9 +166,9 @@ fn setup(
 }
 
 fn ben_animation_system(
+    mut query: Query<(&mut Handle<ColorMaterial>, &mut BenAnimationTimer, &BenDirection), With<Ben>>,
     ben_materials: Res<BenMaterials>,
     time: Res<Time>,
-    mut query: Query<(&mut Handle<ColorMaterial>, &mut BenAnimationTimer, &BenDirection), With<Ben>>
 ) {
     let (mut material_handle, mut ben_animation_timer, ben_direction) = query.single_mut().unwrap();
     let timer = &mut ben_animation_timer.0;
@@ -169,8 +191,8 @@ fn ben_animation_system(
 }
 
 fn ben_movement_system(
+    mut query: Query<(&mut Transform, &BenDirection, &BenSpeed), With<Ben>>,
     board: Res<Board>,
-    mut query: Query<(&mut Transform, &BenDirection, &BenSpeed), With<Ben>>
 ) {
     let (mut transform, ben_direction, ben_speed) = query.single_mut().unwrap();
     let speed = ben_speed.0;
@@ -213,4 +235,25 @@ fn ben_controller_system(
     } else if keys.just_pressed(KeyCode::A) || keys.just_pressed(KeyCode::Left) {
         ben_direction.0 = Direction::Left;
     } 
+}
+
+fn ben_eating_system(
+    mut commands: Commands,
+    query_set: QuerySet<(
+        Query<&Transform, With<Ben>>,
+        Query<(Entity, &DotCoordinates), With<Dot>>
+    )>,
+) {
+    let transform = query_set.q0().single().unwrap();
+    let ben_x = transform.translation.x;
+    let ben_y = transform.translation.y;
+    let tolerance = 20.;
+    for (dot_entity, dot_coordinates) in query_set.q1().iter() {
+        let dot_x = dot_coordinates.0;
+        let dot_y = dot_coordinates.1;
+        if (dot_x - ben_x).abs() < tolerance && (dot_y - ben_y).abs() < tolerance {
+            commands.entity(dot_entity).despawn();
+            break;
+        }
+    }
 }
