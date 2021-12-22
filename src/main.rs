@@ -2,20 +2,17 @@ mod board;
 mod ben;
 mod enums;
 mod dot;
+mod ghost;
+mod utils;
 
-use std::collections::HashMap;
 use bevy::{
     prelude::*,
-    render::camera::{OrthographicProjection, WindowOrigin},
+    render::camera::{OrthographicProjection, WindowOrigin}
 };
-use board::{Board, BoardTile, WallType};
-use ben::{Ben, BenBundle, BenAnimationTimer, BenSpeed, BenDirection};
+use board::{Board, BoardTile};
+use ben::{Ben, BenBundle, BenAnimationTimer, BenSpeed, BenDirection, BenNextDirection};
 use enums::Direction;
 use dot::{Dot, DotBundle, DotCoordinates};
-
-struct WallMaterials {
-    material_dict: HashMap<WallType, Handle<ColorMaterial>> 
-}
 
 struct BenMaterials {
     ben_default: Handle<ColorMaterial>,
@@ -23,6 +20,12 @@ struct BenMaterials {
     ben_right: Handle<ColorMaterial>,
     ben_down: Handle<ColorMaterial>,
     ben_left: Handle<ColorMaterial>,
+}
+
+#[derive(SystemLabel, Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+enum Label {
+    BenControllerSystem,
+    BenMovementSystem
 }
 
 fn main() {
@@ -38,10 +41,13 @@ fn main() {
         })
         .insert_resource(board)
         .add_startup_system(setup.system())
-        .add_system(ben_animation_system.system())
-        .add_system(ben_movement_system.system())
-        .add_system(ben_controller_system.system())
-        .add_system(ben_eating_system.system())
+        .add_system_set(
+            SystemSet::new()
+                .with_system(ben_controller_system.system().label(Label::BenControllerSystem))
+                .with_system(ben_movement_system.system().label(Label::BenMovementSystem).after(Label::BenControllerSystem))
+                .with_system(ben_collision_system.system().after(Label::BenMovementSystem))
+                .with_system(ben_animation_system.system().after(Label::BenMovementSystem))
+        )
         .add_plugins(DefaultPlugins)
         .run();
 }
@@ -61,85 +67,43 @@ fn setup(
         ..OrthographicCameraBundle::new_2d()
     });
 
-    // Walls, dots, and fruit
+    // Board
+    let board_material_handle = materials.add(asset_server.load("../assets/board.png").into());
+    commands.spawn_bundle(SpriteBundle {
+        material: board_material_handle.clone(),
+        transform: Transform {
+            translation: Vec3::new(board.width() as f32 * board.cell_size() / 2., board.height() as f32 * board.cell_size() / 2., 1.),
+            ..Default::default()
+        },
+        ..Default::default()
+    });
+
+    // Dots
     let dot_material_handle = materials.add(asset_server.load("../assets/cookie.png").into());
-    let wall_materials = WallMaterials {
-        material_dict: HashMap::from([
-            (WallType::CornerBottomLeft, materials.add(asset_server.load("../assets/walls/corner_bottom_left.png").into())),
-            (WallType::CornerBottomLeftEnclosed, materials.add(asset_server.load("../assets/walls/corner_bottom_left_enclosed.png").into())),
-            (WallType::CornerBottomLeftSolid, materials.add(asset_server.load("../assets/walls/corner_bottom_left_solid.png").into())),
-            (WallType::CornerBottomRight, materials.add(asset_server.load("../assets/walls/corner_bottom_right.png").into())),
-            (WallType::CornerBottomRightEnclosed, materials.add(asset_server.load("../assets/walls/corner_bottom_right_enclosed.png").into())),
-            (WallType::CornerBottomRightSolid, materials.add(asset_server.load("../assets/walls/corner_bottom_right_solid.png").into())),
-            (WallType::CornerTopLeft, materials.add(asset_server.load("../assets/walls/corner_top_left.png").into())),
-            (WallType::CornerTopLeftSolid, materials.add(asset_server.load("../assets/walls/corner_top_left_solid.png").into())),
-            (WallType::CornerTopRight, materials.add(asset_server.load("../assets/walls/corner_top_right.png").into())),
-            (WallType::CornerTopRightSolid, materials.add(asset_server.load("../assets/walls/corner_top_right_solid.png").into())),
-            (WallType::WallBottomHollow, materials.add(asset_server.load("../assets/walls/wall_bottom_hollow.png").into())),
-            (WallType::WallBottomSolid, materials.add(asset_server.load("../assets/walls/wall_bottom_solid.png").into())),
-            (WallType::WallLeftHollow, materials.add(asset_server.load("../assets/walls/wall_left_hollow.png").into())),
-            (WallType::WallLeftSolid, materials.add(asset_server.load("../assets/walls/wall_left_solid.png").into())),
-            (WallType::WallRightHollow, materials.add(asset_server.load("../assets/walls/wall_right_hollow.png").into())),
-            (WallType::WallRightSolid, materials.add(asset_server.load("../assets/walls/wall_right_solid.png").into())),
-            (WallType::WallTopHollow, materials.add(asset_server.load("../assets/walls/wall_top_hollow.png").into())),
-            (WallType::WallTopSolid, materials.add(asset_server.load("../assets/walls/wall_top_solid.png").into())),
-        ])
-    };
     for i in 0..board.height() {
         for j in 0..board.width() {
-            let curr_tile = board.try_get(i, j).unwrap();
             let (x, y) = board.indeces_to_coordinates(i, j);
-            let material: Handle<ColorMaterial>;
-            let scale_factor: f32;
-            let mut is_dot = false;
-            match curr_tile {
-                BoardTile::Empty => continue,
-                BoardTile::Wall(wall_type) => {
-                    material = wall_materials.material_dict.get(&wall_type).unwrap().clone();
-                    scale_factor = 1.;
-                },
+            match board.try_get(i, j).unwrap() {
                 BoardTile::Dot => {
-                    material = dot_material_handle.clone();
-                    scale_factor = 1.75; 
-                    is_dot = true;
-                },
-                BoardTile::Fruit => {
-                    material = dot_material_handle.clone();
-                    scale_factor = 8.; 
-                }
-            }
-
-            let scale = Vec3::new(1./scale_factor, 1./scale_factor, 1.);
-            if is_dot {
-                commands.spawn_bundle(DotBundle {
-                    coordinates: DotCoordinates(x, y),
-                    sprite_bundle: SpriteBundle {
-                        material,
-                        sprite: Sprite::new(Vec2::new(board.cell_size() as f32, board.cell_size() as f32)),
-                        transform: Transform {
-                            translation: Vec3::new(x,y,2.),
-                            scale,
+                    commands.spawn_bundle(DotBundle {
+                        coordinates: DotCoordinates(x, y),
+                        sprite_bundle: SpriteBundle {
+                            material: dot_material_handle.clone(),
+                            sprite: Sprite::new(Vec2::new(board.cell_size() as f32, board.cell_size() as f32)),
+                            transform: Transform {
+                                translation: Vec3::new(x, y, 2.),
+                                scale: Vec3::new(1./1.75, 1./1.75, 1.),
+                                ..Default::default()
+                            },
                             ..Default::default()
                         },
                         ..Default::default()
-                    },
-                    ..Default::default()
-                });
-            } else {
-                commands.spawn_bundle(SpriteBundle {
-                    material,
-                    sprite: Sprite::new(Vec2::new(board.cell_size() as f32, board.cell_size() as f32)),
-                    transform: Transform {
-                        translation: Vec3::new(x,y,2.),
-                        scale,
-                        ..Default::default()
-                    },
-                    ..Default::default()
-                });
+                    });
+                },
+                _ => continue
             }
         }
     }
-    commands.insert_resource(wall_materials);
 
     // Ben
     let (_, ben_y_init) = board.indeces_to_coordinates(24, 0);
@@ -165,95 +129,110 @@ fn setup(
     commands.insert_resource(ben_materials);
 }
 
-fn ben_animation_system(
-    mut query: Query<(&mut Handle<ColorMaterial>, &mut BenAnimationTimer, &BenDirection), With<Ben>>,
-    ben_materials: Res<BenMaterials>,
-    time: Res<Time>,
+fn ben_controller_system(
+    mut query: Query<&mut BenNextDirection, With<Ben>>,
+    keys: Res<Input<KeyCode>>
 ) {
-    let (mut material_handle, mut ben_animation_timer, ben_direction) = query.single_mut().unwrap();
-    let timer = &mut ben_animation_timer.0;
-    timer.tick(time.delta());
-    if !timer.finished() {
-        return;
-    }
-
-    material_handle.id = if material_handle.id != ben_materials.ben_default.id {
-        ben_materials.ben_default.id
-    } else {
-        let direction = ben_direction.0;
-        match direction {
-            Direction::Up => ben_materials.ben_up.id,
-            Direction::Right => ben_materials.ben_right.id,
-            Direction::Down => ben_materials.ben_down.id,
-            Direction::Left => ben_materials.ben_left.id,
-        }
+    let mut ben_next_direction = query.single_mut().unwrap();
+    if keys.just_pressed(KeyCode::W) || keys.just_pressed(KeyCode::Up) {
+        ben_next_direction.0 = Some(Direction::Up);
+    } else if keys.just_pressed(KeyCode::D) || keys.just_pressed(KeyCode::Right) {
+        ben_next_direction.0 = Some(Direction::Right);
+    } else if keys.just_pressed(KeyCode::S) || keys.just_pressed(KeyCode::Down) {
+        ben_next_direction.0 = Some(Direction::Down);
+    } else if keys.just_pressed(KeyCode::A) || keys.just_pressed(KeyCode::Left) {
+        ben_next_direction.0 = Some(Direction::Left);
     }
 }
 
 fn ben_movement_system(
-    mut query: Query<(&mut Transform, &BenDirection, &BenSpeed), With<Ben>>,
-    board: Res<Board>,
+    mut query: Query<(&mut Transform, &mut BenNextDirection , &mut BenDirection, &BenSpeed), With<Ben>>,
+    board: Res<Board>
 ) {
-    let (mut transform, ben_direction, ben_speed) = query.single_mut().unwrap();
+    let (mut transform, mut ben_next_direction, mut ben_direction, ben_speed) = query.single_mut().unwrap();
     let speed = ben_speed.0;
+    let can_move_up = utils::can_move_up(&transform, &board, speed);
+    let can_move_right = utils::can_move_right(&transform, &board, speed);
+    let can_move_down = utils::can_move_down(&transform, &board, speed);
+    let can_move_left = utils::can_move_left(&transform, &board, speed);
+
+    // Determine if the direction needs to be changed
+    let next_direction = ben_next_direction.0;
+    if next_direction.is_some() {
+        match next_direction.unwrap() {
+            Direction::Up => {
+                if can_move_up {
+                    ben_direction.0 = Direction::Up;
+                    ben_next_direction.0 = None;
+                }
+            },
+            Direction::Right => {
+                if can_move_right {
+                    ben_direction.0 = Direction::Right;
+                    ben_next_direction.0 = None;
+                }
+            },
+            Direction::Down => {
+                if can_move_down {
+                    ben_direction.0 = Direction::Down;
+                    ben_next_direction.0 = None;
+                }
+            },
+            Direction::Left => {
+                if can_move_left {
+                    ben_direction.0 = Direction::Left;
+                    ben_next_direction.0 = None;
+                }
+            },
+        }
+    }
+
+    // Perform the movement
     let direction = ben_direction.0;
-    let x = transform.translation.x + board.offset();
-    let y = transform.translation.y - board.offset();
-    let (i, j) = board.coordinates_to_indeces(x, y);
-
-    let top_tile = if i == 0 { None } else { board.try_get(i - 1, j) };
-    let right_tile = board.try_get(i, j + 1);
-    let bottom_tile = board.try_get(i + 1, j);
-    let left_tile = if j == 0 { None } else { board.try_get(i, j - 1) };
-
-    let is_centered_horizontally = x % board.cell_size() == 0.;
-    let is_centered_vertically = y % board.cell_size() == 0.;
-    let can_move_up= !is_centered_vertically || top_tile.is_some() && match top_tile.unwrap() { BoardTile::Wall(_) => false, _ => true };
-    let can_move_right = !is_centered_horizontally || right_tile.is_some() && match right_tile.unwrap() { BoardTile::Wall(_) => false, _ => true };
-    let can_move_down = !is_centered_vertically || bottom_tile.is_some() && match bottom_tile.unwrap() { BoardTile::Wall(_) => false, _ => true };
-    let can_move_left = !is_centered_horizontally || left_tile.is_some() && match left_tile.unwrap() { BoardTile::Wall(_) => false, _ => true };
-
     match direction {
-        Direction::Up => if can_move_up { transform.translation.y += speed }, 
-        Direction::Right => if can_move_right { transform.translation.x += speed }, 
-        Direction::Down => if can_move_down { transform.translation.y -= speed }, 
-        Direction::Left => if can_move_left { transform.translation.x -= speed }, 
+        Direction::Up => {
+            if can_move_up {
+                transform.translation.y += speed;
+            }
+        },
+        Direction::Right => {
+            if can_move_right {
+                transform.translation.x += speed;
+            }
+        },
+        Direction::Down => {
+            if can_move_down {
+                transform.translation.y -= speed;
+            }
+        },
+        Direction::Left => {
+            if can_move_left {
+                transform.translation.x -= speed;
+            }
+        }
     }
 }
 
-fn ben_controller_system(
-    mut query: Query<&mut BenDirection, With<Ben>>,
-    keys: Res<Input<KeyCode>>
-) {
-    let mut ben_direction = query.single_mut().unwrap();
-    if keys.just_pressed(KeyCode::W) || keys.just_pressed(KeyCode::Up) {
-        ben_direction.0 = Direction::Up;
-    } else if keys.just_pressed(KeyCode::D) || keys.just_pressed(KeyCode::Right) {
-        ben_direction.0 = Direction::Right;
-    } else if keys.just_pressed(KeyCode::S) || keys.just_pressed(KeyCode::Down) {
-        ben_direction.0 = Direction::Down;
-    } else if keys.just_pressed(KeyCode::A) || keys.just_pressed(KeyCode::Left) {
-        ben_direction.0 = Direction::Left;
-    } 
+fn ben_animation_system() {
 }
 
-fn ben_eating_system(
+fn ben_collision_system(
     mut commands: Commands,
     query_set: QuerySet<(
         Query<&Transform, With<Ben>>,
-        Query<(Entity, &DotCoordinates), With<Dot>>
+        Query<(Entity, &Transform), With<Dot>>
     )>,
+    board: Res<Board>
 ) {
-    let transform = query_set.q0().single().unwrap();
-    let ben_x = transform.translation.x;
-    let ben_y = transform.translation.y;
-    let tolerance = 20.;
-    for (dot_entity, dot_coordinates) in query_set.q1().iter() {
-        let dot_x = dot_coordinates.0;
-        let dot_y = dot_coordinates.1;
-        if (dot_x - ben_x).abs() < tolerance && (dot_y - ben_y).abs() < tolerance {
-            commands.entity(dot_entity).despawn();
-            break;
+    let ben_transform = query_set.q0().single().unwrap();
+
+    if utils::is_centered_horizontally(ben_transform, &board) && utils::is_centered_vertically(ben_transform, &board) {
+        // Consume dot
+        for (dot_entity, dot_transform) in query_set.q1().iter() {
+            if dot_transform.translation.x == ben_transform.translation.x && dot_transform.translation.y == ben_transform.translation.y {
+                commands.entity(dot_entity).despawn();
+                break;
+            }
         }
     }
 }
