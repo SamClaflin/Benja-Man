@@ -12,6 +12,13 @@ pub struct BenSpeed(pub f32);
 pub struct BenDirection(pub Direction);
 
 pub struct BenNextDirection(pub Option<Direction>);
+pub struct BenMaterials {
+    pub ben_default: Handle<ColorMaterial>,
+    pub ben_up: Handle<ColorMaterial>,
+    pub ben_right: Handle<ColorMaterial>,
+    pub ben_down: Handle<ColorMaterial>,
+    pub ben_left: Handle<ColorMaterial>,
+}
 
 #[derive(Bundle)]
 pub struct BenBundle {

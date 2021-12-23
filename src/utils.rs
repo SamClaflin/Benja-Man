@@ -16,7 +16,8 @@ pub fn can_move_up(transform: &Transform, board: &Board, speed: f32) -> bool {
     let new_tile = board.try_get(i, j);
     is_centered_horizontally(&transform, &board) 
         && new_tile.is_some() 
-        && match new_tile.unwrap() { BoardTile::Wall(_) => false, _ => true }
+        && new_tile.unwrap() != BoardTile::Wall
+        && new_tile.unwrap() != BoardTile::GhostGate
 }
 
 pub fn can_move_right(transform: &Transform, board: &Board, speed: f32) -> bool {
@@ -25,7 +26,8 @@ pub fn can_move_right(transform: &Transform, board: &Board, speed: f32) -> bool 
     let new_tile = board.try_get(i, j);
     is_centered_vertically(&transform, &board) 
         && new_tile.is_some() 
-        && match new_tile.unwrap() { BoardTile::Wall(_) => false, _ => true }
+        && new_tile.unwrap() != BoardTile::Wall
+        && new_tile.unwrap() != BoardTile::GhostGate
 }
 
 pub fn can_move_down(transform: &Transform, board: &Board, speed: f32) -> bool {
@@ -34,7 +36,8 @@ pub fn can_move_down(transform: &Transform, board: &Board, speed: f32) -> bool {
     let new_tile = board.try_get(i, j);
     is_centered_horizontally(&transform, &board) 
         && new_tile.is_some() 
-        && match new_tile.unwrap() { BoardTile::Wall(_) => false, _ => true }
+        && new_tile.unwrap() != BoardTile::Wall
+        && new_tile.unwrap() != BoardTile::GhostGate
 }
 
 pub fn can_move_left(transform: &Transform, board: &Board, speed: f32) -> bool {
@@ -43,5 +46,6 @@ pub fn can_move_left(transform: &Transform, board: &Board, speed: f32) -> bool {
     let new_tile = board.try_get(i, j);
     is_centered_vertically(&transform, &board) 
         && new_tile.is_some() 
-        && match new_tile.unwrap() { BoardTile::Wall(_) => false, _ => true }
+        && new_tile.unwrap() != BoardTile::Wall
+        && new_tile.unwrap() != BoardTile::GhostGate
 }
