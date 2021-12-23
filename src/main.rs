@@ -146,19 +146,16 @@ fn setup(
     commands.insert_resource(ben_materials);
 
     // TODO: Caleb
-    let temp_material = materials.add(Color::rgb(0., 1., 0.).into());
+    let caleb_material = materials.add(asset_server.load("../assets/ghosts/caleb.png").into());
     let caleb_init_x = board.cell_size() * board.width() as f32 / 2.;
     let (_, caleb_init_y) = board.indeces_to_coordinates(11, 0);
     commands.spawn_bundle(CalebBundle {
         ghost_bundle: GhostBundle {
             sprite_bundle: SpriteBundle {
-                material: temp_material.clone(),
+                material: caleb_material.clone(),
                 transform: Transform {
                     translation: Vec3::new(caleb_init_x, caleb_init_y, 9.),
-                    ..Default::default()
-                },
-                sprite: Sprite {
-                    size: Vec2::new(board.cell_size(), board.cell_size()),
+                    scale: Vec3::new(1./6., 1./6., 1.),
                     ..Default::default()
                 },
                 ..Default::default()
@@ -169,18 +166,16 @@ fn setup(
     });
 
     // TODO: Harris 
+    let harris_material = materials.add(asset_server.load("../assets/ghosts/sam_h.png").into());
     let harris_init_x = board.cell_size() * board.width() as f32 / 2. - board.cell_size() * 2.;
     let (_, harris_init_y) = board.indeces_to_coordinates(14, 0);
     commands.spawn_bundle(HarrisBundle {
         ghost_bundle: GhostBundle {
             sprite_bundle: SpriteBundle {
-                material: temp_material.clone(),
+                material: harris_material.clone(),
                 transform: Transform {
                     translation: Vec3::new(harris_init_x, harris_init_y, 9.),
-                    ..Default::default()
-                },
-                sprite: Sprite {
-                    size: Vec2::new(board.cell_size(), board.cell_size()),
+                    scale: Vec3::new(1./6., 1./6., 1.),
                     ..Default::default()
                 },
                 ..Default::default()
@@ -191,18 +186,16 @@ fn setup(
     });
 
     // TODO: Claflin 
+    let claflin_material = materials.add(asset_server.load("../assets/ghosts/sam_c.png").into());
     let claflin_init_x = board.cell_size() * board.width() as f32 / 2.;
     let (_, claflin_init_y) = board.indeces_to_coordinates(14, 0);
     commands.spawn_bundle(ClaflinBundle {
         ghost_bundle: GhostBundle {
             sprite_bundle: SpriteBundle {
-                material: temp_material.clone(),
+                material: claflin_material.clone(),
                 transform: Transform {
                     translation: Vec3::new(claflin_init_x, claflin_init_y, 9.),
-                    ..Default::default()
-                },
-                sprite: Sprite {
-                    size: Vec2::new(board.cell_size(), board.cell_size()),
+                    scale: Vec3::new(1./6., 1./6., 1.),
                     ..Default::default()
                 },
                 ..Default::default()
@@ -213,18 +206,16 @@ fn setup(
     });
 
     // TODO: Samson 
+    let samson_material = materials.add(asset_server.load("../assets/ghosts/samson.png").into());
     let samson_init_x = board.cell_size() * board.width() as f32 / 2. + board.cell_size() * 2.;
     let (_, samson_init_y) = board.indeces_to_coordinates(14, 0);
     commands.spawn_bundle(SamsonBundle {
         ghost_bundle: GhostBundle {
             sprite_bundle: SpriteBundle {
-                material: temp_material.clone(),
+                material: samson_material.clone(),
                 transform: Transform {
                     translation: Vec3::new(samson_init_x, samson_init_y, 9.),
-                    ..Default::default()
-                },
-                sprite: Sprite {
-                    size: Vec2::new(board.cell_size(), board.cell_size()),
+                    scale: Vec3::new(1./6., 1./6., 1.),
                     ..Default::default()
                 },
                 ..Default::default()
