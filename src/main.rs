@@ -570,7 +570,10 @@ fn scare_ghosts_system(
     mut ghost_scare_timer: ResMut<GhostScareTimer>,
     time: Res<Time>
 ) {
+    let timer = &mut ghost_scare_timer.0;
+
     for _ in power_up_consumed_event.iter() {
+        timer.reset();
         for mut attack_state in query.iter_mut() {
             if *attack_state == AttackState::Attacking {
                 *attack_state = AttackState::Scared;
@@ -587,7 +590,6 @@ fn scare_ghosts_system(
     }
 
     if scared {
-        let timer = &mut ghost_scare_timer.0;
         timer.tick(time.delta());
         if timer.finished() {
             for mut attack_state in query.iter_mut() {
