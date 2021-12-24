@@ -2,17 +2,23 @@ use bevy::prelude::*;
 use crate::path::Path;
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug, Hash)]
-pub enum GhostState {
-    Default,
-    Scared,
-    Respawning
+pub enum AttackState {
+    Attacking,
+    Scared
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug, Hash)]
+pub enum ReleaseState {
+    Caged,
+    Releasing,
+    Released
 }
 
 pub struct Ghost;
 
 pub struct GhostPath(pub Path);
 
-pub struct GhostStateComponent(pub GhostState);
+pub struct GhostSpeed(pub f32);
 
 pub struct GhostScareTimer(pub Timer);
 
@@ -22,11 +28,21 @@ impl Default for GhostScareTimer {
     }
 }
 
+pub struct GhostReleaseTimer(pub Timer);
+
+impl Default for GhostReleaseTimer {
+    fn default() -> Self {
+        Self(Timer::from_seconds(5., false))
+    }
+}
+
 #[derive(Bundle)]
 pub struct GhostBundle {
     pub ghost: Ghost,
-    pub state: GhostStateComponent,
+    pub attack_state: AttackState,
+    pub release_state: ReleaseState,
     pub path: GhostPath,
+    pub speed: GhostSpeed,
 
     #[bundle]
     pub sprite_bundle: SpriteBundle
@@ -36,8 +52,10 @@ impl Default for GhostBundle {
     fn default() -> Self {
         Self {
             ghost: Ghost,
-            state: GhostStateComponent(GhostState::Default),
+            attack_state: AttackState::Attacking,
+            release_state: ReleaseState::Caged,
             path: GhostPath(Path::new()),
+            speed: GhostSpeed(2.),
             sprite_bundle: SpriteBundle::default()
         }
     }
