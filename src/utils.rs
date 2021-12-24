@@ -49,3 +49,8 @@ pub fn can_move_left(transform: &Transform, board: &Board, speed: f32) -> bool {
         && new_tile.unwrap() != BoardTile::Wall
         && new_tile.unwrap() != BoardTile::GhostGate
 }
+
+pub fn did_collide(a_transform: &Transform, b_transform: &Transform, board: &Board) -> bool {
+    a_transform.translation.x == b_transform.translation.x && (a_transform.translation.y - b_transform.translation.y).abs() <= board.cell_size()
+    || a_transform.translation.y == b_transform.translation.y && (a_transform.translation.x - b_transform.translation.x).abs() <= board.cell_size()
+}

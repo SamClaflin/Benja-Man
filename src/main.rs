@@ -7,19 +7,41 @@ mod utils;
 mod score;
 mod events;
 mod power_up;
+mod path;
 
 use bevy::{
     prelude::*,
     render::camera::{OrthographicProjection, WindowOrigin}
 };
+use ghost::{
+    Ghost, 
+    GhostPath, 
+    GhostState, 
+    GhostStateComponent,
+    GhostBundle,
+    Caleb,
+    CalebBundle, 
+    CalebMaterials,
+    CalebPathChangeTimer, 
+    Harris, 
+    HarrisMaterials,
+    HarrisBundle, 
+    Claflin, 
+    ClaflinMaterials,
+    ClaflinBundle, 
+    Samson, 
+    SamsonMaterials,
+    SamsonBundle,
+    GhostScareTimer
+};
 use board::{Board, BoardTile};
 use ben::{Ben, BenBundle, BenAnimationTimer, BenSpeed, BenDirection, BenNextDirection, BenMaterials};
-use enums::{Direction, Label};
+use enums::Direction;
 use dot::{Dot, DotBundle};
 use score::{Score, ScoreBundle, PointValues};
 use events::{BenDirectionChangedEvent, PowerUpConsumedEvent};
-use ghost::{Ghost, GhostBundle, CalebBundle, HarrisBundle, ClaflinBundle, SamsonBundle};
 use power_up::{PowerUp, PowerUpBundle, PowerUpMaterials, PowerUpAnimationTimer};
+use path::Path;
 
 fn main() {
     let board = Board::new(32., 16.);
@@ -33,20 +55,31 @@ fn main() {
             ..Default::default()
         })
         .insert_resource(board)
-        .insert_resource(Score(0))
         .init_resource::<PointValues>()
-        .add_startup_system(setup.system())
+        .init_resource::<GhostScareTimer>()
         .add_event::<BenDirectionChangedEvent>()
         .add_event::<PowerUpConsumedEvent>()
+        .add_startup_system(setup.system())
         .add_system_set(
             SystemSet::new()
-                .with_system(ben_controller_system.system().label(Label::BenControllerSystem))
-                .with_system(ben_movement_system.system().label(Label::BenMovementSystem).after(Label::BenControllerSystem))
-                .with_system(ben_collision_system.system().after(Label::BenMovementSystem))
-                .with_system(ben_animation_system.system().after(Label::BenMovementSystem))
+                .with_system(ben_controller_system.system())
+                .with_system(ben_movement_system.system())
+                .with_system(ben_dot_collision_system.system())
+                .with_system(ben_power_up_collision_system.system())
+                .with_system(ben_ghost_collision_system.system())
+                .with_system(ben_animation_system.system())
+                .with_system(scare_ghosts_system.system())
+                .with_system(caleb_movement_system.system())
+                .with_system(harris_movement_system.system())
+                .with_system(claflin_movement_system.system())
+                .with_system(samson_movement_system.system())
+                .with_system(caleb_animation_system.system())
+                .with_system(harris_animation_system.system())
+                .with_system(claflin_animation_system.system())
+                .with_system(samson_animation_system.system())
+                .with_system(power_up_animation_system.system())
+                .with_system(score_system.system())
         )
-        .add_system(power_up_animation_system.system())
-        .add_system(score_system.system())
         .add_plugins(DefaultPlugins)
         .run();
 }
@@ -145,14 +178,17 @@ fn setup(
     });
     commands.insert_resource(ben_materials);
 
-    // TODO: Caleb
-    let caleb_material = materials.add(asset_server.load("../assets/ghosts/caleb.png").into());
+    // Caleb
+    let caleb_materials = CalebMaterials {
+        default_material: materials.add(asset_server.load("../assets/ghosts/caleb.png").into()),
+        scared_material: materials.add(asset_server.load("../assets/ghosts/caleb_scared.png").into()),
+    };
     let caleb_init_x = board.cell_size() * board.width() as f32 / 2.;
     let (_, caleb_init_y) = board.indeces_to_coordinates(11, 0);
     commands.spawn_bundle(CalebBundle {
         ghost_bundle: GhostBundle {
             sprite_bundle: SpriteBundle {
-                material: caleb_material.clone(),
+                material: caleb_materials.default_material.clone(),
                 transform: Transform {
                     translation: Vec3::new(caleb_init_x, caleb_init_y, 9.),
                     scale: Vec3::new(1./6., 1./6., 1.),
@@ -164,15 +200,19 @@ fn setup(
         },
         ..Default::default()
     });
+    commands.insert_resource(caleb_materials);
 
-    // TODO: Harris 
-    let harris_material = materials.add(asset_server.load("../assets/ghosts/sam_h.png").into());
+    // Harris 
+    let harris_materials = HarrisMaterials {
+        default_material: materials.add(asset_server.load("../assets/ghosts/sam_h.png").into()),
+        scared_material: materials.add(asset_server.load("../assets/ghosts/sam_h_scared.png").into()),
+    };
     let harris_init_x = board.cell_size() * board.width() as f32 / 2. - board.cell_size() * 2.;
     let (_, harris_init_y) = board.indeces_to_coordinates(14, 0);
     commands.spawn_bundle(HarrisBundle {
         ghost_bundle: GhostBundle {
             sprite_bundle: SpriteBundle {
-                material: harris_material.clone(),
+                material: harris_materials.default_material.clone(),
                 transform: Transform {
                     translation: Vec3::new(harris_init_x, harris_init_y, 9.),
                     scale: Vec3::new(1./6., 1./6., 1.),
@@ -184,15 +224,19 @@ fn setup(
         },
         ..Default::default()
     });
+    commands.insert_resource(harris_materials);
 
-    // TODO: Claflin 
-    let claflin_material = materials.add(asset_server.load("../assets/ghosts/sam_c.png").into());
+    // Claflin 
+    let claflin_materials = ClaflinMaterials {
+        default_material: materials.add(asset_server.load("../assets/ghosts/sam_c.png").into()),
+        scared_material: materials.add(asset_server.load("../assets/ghosts/sam_c_scared.png").into()),
+    };
     let claflin_init_x = board.cell_size() * board.width() as f32 / 2.;
     let (_, claflin_init_y) = board.indeces_to_coordinates(14, 0);
     commands.spawn_bundle(ClaflinBundle {
         ghost_bundle: GhostBundle {
             sprite_bundle: SpriteBundle {
-                material: claflin_material.clone(),
+                material: claflin_materials.default_material.clone(),
                 transform: Transform {
                     translation: Vec3::new(claflin_init_x, claflin_init_y, 9.),
                     scale: Vec3::new(1./6., 1./6., 1.),
@@ -204,15 +248,19 @@ fn setup(
         },
         ..Default::default()
     });
+    commands.insert_resource(claflin_materials);
 
-    // TODO: Samson 
-    let samson_material = materials.add(asset_server.load("../assets/ghosts/samson.png").into());
+    // Samson 
+    let samson_materials = SamsonMaterials {
+        default_material: materials.add(asset_server.load("../assets/ghosts/samson.png").into()),
+        scared_material: materials.add(asset_server.load("../assets/ghosts/samson_scared.png").into()),
+    };
     let samson_init_x = board.cell_size() * board.width() as f32 / 2. + board.cell_size() * 2.;
     let (_, samson_init_y) = board.indeces_to_coordinates(14, 0);
     commands.spawn_bundle(SamsonBundle {
         ghost_bundle: GhostBundle {
             sprite_bundle: SpriteBundle {
-                material: samson_material.clone(),
+                material: samson_materials.default_material.clone(),
                 transform: Transform {
                     translation: Vec3::new(samson_init_x, samson_init_y, 9.),
                     scale: Vec3::new(1./6., 1./6., 1.),
@@ -224,6 +272,7 @@ fn setup(
         },
         ..Default::default()
     });
+    commands.insert_resource(samson_materials);
 
     // Score
     let font = asset_server.load("../assets/font.ttf");
@@ -365,47 +414,73 @@ fn ben_animation_system(
     }
 }
 
-fn ben_collision_system(
+fn ben_dot_collision_system(
     mut commands: Commands,
-    mut score: ResMut<Score>,
-    mut power_up_consumed_event: EventWriter<PowerUpConsumedEvent>,
     mut query_set: QuerySet<(
         Query<&Transform, With<Ben>>,
         Query<(Entity, &Transform), With<Dot>>,
-        Query<(Entity, &Transform, &mut Handle<ColorMaterial>), With<PowerUp>>,
-        Query<(Entity, &Transform), With<Ghost>>
+        Query<&mut Score>,
     )>,
     board: Res<Board>,
     point_values: Res<PointValues>,
-    power_up_materials: Res<PowerUpMaterials>
 ) {
     let ben_transform = query_set.q0().single().unwrap().clone();
-
     if utils::is_centered_horizontally(&ben_transform, &board) && utils::is_centered_vertically(&ben_transform, &board) {
-        // Dots
         for (dot_entity, dot_transform) in query_set.q1().iter() {
             if dot_transform.translation.x == ben_transform.translation.x && dot_transform.translation.y == ben_transform.translation.y {
                 commands.entity(dot_entity).despawn();
-                score.0 += point_values.dot;
+                query_set.q2_mut().single_mut().unwrap().0 += point_values.dot;
                 break;
             }
         }
+    }
+}
 
-        // Power-ups
-        for (power_up_entity, power_up_transform, mut power_up_material) in query_set.q2_mut().iter_mut() {
+fn ben_power_up_collision_system(
+    mut commands: Commands,
+    mut query_set: QuerySet<(
+        Query<&Transform, With<Ben>>,
+        Query<(Entity, &Transform, &mut Handle<ColorMaterial>), With<PowerUp>>,
+        Query<&mut Score>
+    )>,
+    mut power_up_consumed_event: EventWriter<PowerUpConsumedEvent>,
+    board: Res<Board>,
+    point_values: Res<PointValues>,
+    power_up_materials: Res<PowerUpMaterials>,
+) {
+    let ben_transform = query_set.q0().single().unwrap().clone();
+    if utils::is_centered_horizontally(&ben_transform, &board) && utils::is_centered_vertically(&ben_transform, &board) {
+        for (power_up_entity, power_up_transform, mut power_up_material) in query_set.q1_mut().iter_mut() {
             if power_up_transform.translation.x == ben_transform.translation.x && power_up_transform.translation.y == ben_transform.translation.y {
                 reset_power_up_sprite(&mut power_up_material, &power_up_materials);
                 commands.entity(power_up_entity).despawn();
-                score.0 += point_values.power_up;
+                query_set.q2_mut().single_mut().unwrap().0 += point_values.power_up;
                 power_up_consumed_event.send(PowerUpConsumedEvent);
                 break;
             }
         }
+    }
+}
 
-        // // Ghosts
-        // for (ghost_entity, ghost_transform) in query_set.q3().iter() {
-        //     // TODO: Check for collision
-        // }
+fn ben_ghost_collision_system(
+    mut commands: Commands,
+    mut query_set: QuerySet<(
+        Query<&Transform, With<Ben>>,
+        Query<(Entity, &Transform, &GhostStateComponent), With<Ghost>>,
+        Query<&mut Score>
+    )>,
+    board: Res<Board>,
+    point_values: Res<PointValues>,
+) {
+    let ben_transform = query_set.q0().single().unwrap().clone();
+    for (ghost_entity, ghost_transform, ghost_state_component) in query_set.q1().iter() {
+        if utils::did_collide(ghost_transform, &ben_transform, &board) {
+            match ghost_state_component.0 {
+                GhostState::Default => println!("Player dies"),
+                GhostState::Respawning => { },
+                GhostState::Scared => println!("Ghost dies"),
+            }
+        }
     }
 }
 
@@ -429,11 +504,144 @@ fn power_up_animation_system(
     }
 }
 
-fn score_system(
-    score: Res<Score>,
-    mut query: Query<&mut Text, With<Score>>
+fn scare_ghosts_system(
+    mut query: Query<&mut GhostStateComponent, With<Ghost>>,
+    mut power_up_consumed_event: EventReader<PowerUpConsumedEvent>,
+    mut ghost_scare_timer: ResMut<GhostScareTimer>,
+    time: Res<Time>
 ) {
-    let mut text = query.single_mut().unwrap();
+    for _ in power_up_consumed_event.iter() {
+        for mut ghost_state_component in query.iter_mut() {
+            if ghost_state_component.0 == GhostState::Default {
+                ghost_state_component.0 = GhostState::Scared;
+            }
+        }
+    }
+
+    let mut scared = false;
+    for ghost_state_component in query.iter_mut() {
+        if ghost_state_component.0 == GhostState::Scared {
+            scared = true;
+            break;
+        }
+    }
+
+    if scared {
+        let timer = &mut ghost_scare_timer.0;
+        timer.tick(time.delta());
+        if timer.finished() {
+            for mut ghost_state_component in query.iter_mut() {
+                if ghost_state_component.0 == GhostState::Scared {
+                    ghost_state_component.0 = GhostState::Default; 
+                }
+            }
+
+            timer.reset();
+        }
+    }
+}
+
+fn caleb_movement_system(
+    mut query_set: QuerySet<(
+        Query<(&mut Transform, &mut CalebPathChangeTimer, &mut GhostPath), With<Caleb>>,
+        Query<&Transform, With<Ben>>
+    )>,
+    board: Res<Board>,
+    time: Res<Time>
+) {
+    let ben_transform = query_set.q1().single().unwrap().clone(); 
+    let (mut caleb_transform, mut caleb_path_change_timer, mut ghost_path) = query_set.q0_mut().single_mut().unwrap(); 
+
+    if let Some((x, y)) = ghost_path.0.pop() {
+        caleb_transform.translation.x = x;
+        caleb_transform.translation.y = y;
+    }
+
+    let timer = &mut caleb_path_change_timer.0;
+    timer.tick(time.delta());
+    if !(timer.finished()) {
+        return;
+    }
+
+    ghost_path.0 = Path::shortest_to_transform(&caleb_transform, &ben_transform, &board, 2.);
+}
+
+fn harris_movement_system(
+    mut query: Query<(&mut Transform), With<Harris>>,
+    board: Res<Board>
+) {
+    // TODO: Implement
+    let harris_transform = query.single_mut().unwrap();
+}
+
+fn claflin_movement_system(
+    mut query: Query<(&mut Transform), With<Claflin>>,
+    board: Res<Board>
+) {
+    // TODO: Implement
+    let claflin_transform = query.single_mut().unwrap();
+}
+
+fn samson_movement_system(
+    mut query: Query<(&mut Transform), With<Samson>>,
+    board: Res<Board>
+) {
+    // TODO: Implement
+    let samson_transform = query.single_mut().unwrap();
+}
+
+fn caleb_animation_system(
+    mut query: Query<(&mut Handle<ColorMaterial>, &GhostStateComponent), With<Caleb>>,
+    caleb_materials: Res<CalebMaterials>
+) {
+    let (mut material_handle, ghost_state_component) = query.single_mut().unwrap();
+    material_handle.id = match ghost_state_component.0 {
+        GhostState::Default => caleb_materials.default_material.id,
+        GhostState::Scared => caleb_materials.scared_material.id,
+        _ => caleb_materials.default_material.id
+    };
+}
+
+fn harris_animation_system(
+    mut query: Query<(&mut Handle<ColorMaterial>, &GhostStateComponent), With<Harris>>,
+    harris_materials: Res<HarrisMaterials>
+) {
+    let (mut material_handle, ghost_state_component) = query.single_mut().unwrap();
+    material_handle.id = match ghost_state_component.0 {
+        GhostState::Default => harris_materials.default_material.id,
+        GhostState::Scared => harris_materials.scared_material.id,
+        _ => harris_materials.default_material.id
+    };
+}
+
+fn claflin_animation_system(
+    mut query: Query<(&mut Handle<ColorMaterial>, &GhostStateComponent), With<Claflin>>,
+    claflin_materials: Res<ClaflinMaterials>
+) {
+    let (mut material_handle, ghost_state_component) = query.single_mut().unwrap();
+    material_handle.id = match ghost_state_component.0 {
+        GhostState::Default => claflin_materials.default_material.id,
+        GhostState::Scared => claflin_materials.scared_material.id,
+        _ => claflin_materials.default_material.id
+    };
+}
+
+fn samson_animation_system(
+    mut query: Query<(&mut Handle<ColorMaterial>, &GhostStateComponent), With<Samson>>,
+    samson_materials: Res<SamsonMaterials>
+) {
+    let (mut material_handle, ghost_state_component) = query.single_mut().unwrap();
+    material_handle.id = match ghost_state_component.0 {
+        GhostState::Default => samson_materials.default_material.id,
+        GhostState::Scared => samson_materials.scared_material.id,
+        _ => samson_materials.default_material.id
+    };
+}
+
+fn score_system(
+    mut query: Query<(&mut Text, &Score)>
+) {
+    let (mut text, score) = query.single_mut().unwrap();
     text.sections[0].value = format!("Score: {}", score.0);
 }
 
