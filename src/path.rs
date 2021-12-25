@@ -103,7 +103,7 @@ impl Path {
         );
 
         // Step 2: Move through the ghost gate
-        while path.peek_back().unwrap().1 > target_y {
+        while path.peek_back().unwrap().0 == target_x && path.peek_back().unwrap().1 > target_y {
             let (x, y) = path.peek_back().unwrap().clone();
             path.push_back((x, y - speed));
         }
