@@ -306,7 +306,7 @@ fn setup(
         text_bundle: Text2dBundle {
             text: Text::with_section("", text_style, text_alignment),
             transform: Transform {
-                translation: Vec3::new(board.width() as f32 * board.cell_size() / 2., board.height() as f32 * board.cell_size(), 10.),
+                translation: Vec3::new(board.width() as f32 * board.cell_size() / 2., board.height() as f32 * board.cell_size(), 100.),
                 ..Default::default()
             },
             ..Default::default()
@@ -319,7 +319,8 @@ fn setup(
     commands.insert_resource(misc::SoundMaterials {
         background_sound: asset_server.load("sounds/guts_theme.mp3"),
         slurp_sound: asset_server.load("sounds/slurp.mp3"),
-        death_sound: asset_server.load("sounds/cringe.mp3")
+        ben_death_sound: asset_server.load("sounds/cringe.mp3"),
+        ghost_death_sound: asset_server.load("sounds/fuck.mp3")
     });
 
     // Background music timer
@@ -352,7 +353,7 @@ fn wait_for_game_start(
         commands.spawn_bundle(Text2dBundle {
             text: Text::with_section("Press space to start", text_style, text_alignment),
             transform: Transform {
-                translation: Vec3::new(board.width() as f32 * board.cell_size() / 2., board.height() as f32 * board.cell_size() / 2. + 256., 15.),
+                translation: Vec3::new(board.width() as f32 * board.cell_size() / 2., board.height() as f32 * board.cell_size() / 2. + 256., 100.),
                 ..Default::default()
             },
             ..Default::default()
@@ -541,8 +542,8 @@ fn ben_ghost_collision_system(
             match attack_state {
                 AttackState::Attacking => {
                     game_state.set(GameState::End).unwrap();
-                    end_message_text.0 = "Fat And\nImmeasurably Cringe".to_string();
-                    audio.play(sound_materials.death_sound.clone())
+                    end_message_text.0 = "Fat And\nImmeasurably\nCringe".to_string();
+                    audio.play(sound_materials.ben_death_sound.clone())
                 },
                 AttackState::Scared => {
                     if *release_state == ReleaseState::Respawning {
@@ -558,6 +559,7 @@ fn ben_ghost_collision_system(
                     };
                     ghost_chain.0 += 1;
                     ghost_path.0.clear();
+                    audio.play(sound_materials.ghost_death_sound.clone());
                 }
             }
         }
@@ -1028,7 +1030,7 @@ fn wait_for_restart_system(
         commands.spawn_bundle(Text2dBundle {
             text: Text::with_section("Press space to restart", text_style, text_alignment),
             transform: Transform {
-                translation: Vec3::new(board.width() as f32 * board.cell_size() / 2., board.height() as f32 * board.cell_size() / 2. + 256., 15.),
+                translation: Vec3::new(board.width() as f32 * board.cell_size() / 2., board.height() as f32 * board.cell_size() / 2. + 256., 100.),
                 ..Default::default()
             },
             ..Default::default()
@@ -1068,7 +1070,7 @@ fn display_end_message_system(
         commands.spawn_bundle(Text2dBundle {
             text: Text::with_section(end_message_text.0.as_str(), text_style, text_alignment),
             transform: Transform {
-                translation: Vec3::new(board.width() as f32 * board.cell_size() / 2., board.height() as f32 * board.cell_size() / 2., 15.),
+                translation: Vec3::new(board.width() as f32 * board.cell_size() / 2., board.height() as f32 * board.cell_size() / 2., 100.),
                 ..Default::default()
             },
             ..Default::default()

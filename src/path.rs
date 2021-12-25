@@ -125,6 +125,10 @@ impl Path {
     }
 
     pub fn peek_back(&self) -> Option<&(f32, f32)> {
-        self.0.get(self.0.len() - 1)
+        if self.0.len() > 0 {
+            self.0.get(self.0.len() - 1)
+        } else {
+            None
+        }
     }
 }
