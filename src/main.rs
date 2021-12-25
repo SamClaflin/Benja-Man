@@ -56,7 +56,8 @@ fn main() {
         .insert_resource(WindowDescriptor {
             title: "Benja-Man".to_string(),
             width: board.width() as f32 * board.cell_size(),
-            height: board.height() as f32 * board.cell_size() + 128.,
+            height: board.height() as f32 * board.cell_size() + 32.,
+            resizable: false,
             ..Default::default()
         })
         .insert_resource(board)
