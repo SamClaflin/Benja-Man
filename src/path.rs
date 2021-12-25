@@ -1,7 +1,7 @@
 use std::collections::VecDeque;
 use bevy::prelude::*;
 use crate::board::Board;
-use crate::enums::Direction;
+use crate::enums::{Direction, CollisionType};
 use crate::utils;
 
 pub struct Path(VecDeque<(f32, f32)>);
@@ -11,15 +11,16 @@ impl Path {
         Self(VecDeque::new())
     }
 
-    pub fn shortest_to_transform(initial_transform: &Transform, target_transform: &Transform, board: &Board, speed: f32) -> Self {
+    pub fn shortest_to_transform(initial_transform: &Transform, target_transform: &Transform, board: &Board, speed: f32, collision_type: CollisionType) -> Self {
         fn shortest_to_transform_helper(
             _path: &mut Path,
             _initial_transform: &mut Transform,
             _target_transform: &Transform,
             _board: &Board,
             _speed: f32,
+            _collision_type: CollisionType
         ) {
-            if utils::did_collide(_initial_transform, _target_transform, _board) {
+            if utils::did_collide(_initial_transform, _target_transform, _board, _collision_type) {
                 return;
             }
 
@@ -55,13 +56,14 @@ impl Path {
                     Direction::Left => _initial_transform.translation.x = left_position.0,
                 }
 
-                _path.push((_initial_transform.translation.x, _initial_transform.translation.y));
+                _path.push_back((_initial_transform.translation.x, _initial_transform.translation.y));
                 shortest_to_transform_helper(
                     _path, 
                     _initial_transform, 
                     _target_transform, 
                     _board, 
                     _speed,
+                    _collision_type
                 );
             };
 
@@ -81,15 +83,47 @@ impl Path {
         }
 
         let mut path = Self::new();
-        shortest_to_transform_helper(&mut path, &mut initial_transform.clone(), target_transform, board, speed);
+        shortest_to_transform_helper(&mut path, &mut initial_transform.clone(), target_transform, board, speed, collision_type);
         path
     }
 
-    pub fn push(&mut self, position: (f32, f32)) {
+    pub fn shortest_to_ghost_spawn(initial_transform: &Transform, board: &Board, speed: f32) -> Self {
+        // Step 1: Move to directly above the ghost gate
+        let (target_x, target_y) = utils::get_ghost_spawn_coordinates(board);
+        let (_, temp_y) = board.indeces_to_coordinates(11, 0);
+        let mut path = Self::shortest_to_transform(
+            initial_transform,
+            &Transform {
+                translation: Vec3::new(target_x, temp_y, initial_transform.translation.z),
+                ..Default::default()
+            },
+            board,
+            speed,
+            CollisionType::Exact
+        );
+
+        // Step 2: Move through the ghost gate
+        while path.peek_back().unwrap().1 > target_y {
+            let (x, y) = path.peek_back().unwrap().clone();
+            path.push_back((x, y - speed));
+        }
+
+        path
+    }
+
+    pub fn push_back(&mut self, position: (f32, f32)) {
         self.0.push_back(position);
     }
 
-    pub fn pop(&mut self) -> Option<(f32, f32)> {
+    pub fn pop_front(&mut self) -> Option<(f32, f32)> {
         self.0.pop_front()
+    }
+
+    pub fn clear(&mut self) {
+        self.0.clear();
+    }
+
+    pub fn peek_back(&self) -> Option<&(f32, f32)> {
+        self.0.get(self.0.len() - 1)
     }
 }

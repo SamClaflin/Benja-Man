@@ -12,6 +12,7 @@ pub enum Direction {
 pub enum Label {
     BenControllerSystem,
     BenMovementSystem,
+    BenGhostCollisionSystem
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -20,4 +21,10 @@ pub enum GameState {
     Default,
     Win,
     Lose
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum CollisionType {
+    Approximate,
+    Exact
 }

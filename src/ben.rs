@@ -1,5 +1,6 @@
 use bevy::prelude::*;
 use crate::enums::Direction;
+use crate::constants;
 
 pub struct Ben;
 
@@ -40,7 +41,7 @@ impl Default for BenBundle {
             lives: BenLives(3),
             direction: BenDirection(Direction::Right),
             animation_timer: BenAnimationTimer(Timer::from_seconds(0.2, true)),
-            speed: BenSpeed(4.),
+            speed: BenSpeed(constants::BEN_SPEED_DEFAULT),
             next_direction: BenNextDirection(None),
             sprite_bundle: SpriteBundle::default(),
         } 

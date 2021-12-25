@@ -1,5 +1,6 @@
 use bevy::prelude::*;
 use crate::path::Path;
+use crate::constants;
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug, Hash)]
 pub enum AttackState {
@@ -11,7 +12,8 @@ pub enum AttackState {
 pub enum ReleaseState {
     Caged,
     Releasing,
-    Released
+    Released,
+    Respawning
 }
 
 pub struct Ghost;
@@ -55,15 +57,13 @@ impl Default for GhostBundle {
             attack_state: AttackState::Attacking,
             release_state: ReleaseState::Caged,
             path: GhostPath(Path::new()),
-            speed: GhostSpeed(2.),
+            speed: GhostSpeed(constants::GHOST_SPEED_DEFAULT),
             sprite_bundle: SpriteBundle::default()
         }
     }
 }
 
 pub struct Caleb;
-
-pub struct CalebPathChangeTimer(pub Timer);
 
 pub struct CalebMaterials {
     pub default_material: Handle<ColorMaterial>,
@@ -73,7 +73,6 @@ pub struct CalebMaterials {
 #[derive(Bundle)]
 pub struct CalebBundle {
     pub caleb: Caleb,
-    pub path_change_timer: CalebPathChangeTimer,
 
     #[bundle]
     pub ghost_bundle: GhostBundle
@@ -83,7 +82,6 @@ impl Default for CalebBundle {
     fn default() -> Self {
         Self {
             caleb: Caleb,
-            path_change_timer: CalebPathChangeTimer(Timer::from_seconds(2., true)),
             ghost_bundle: GhostBundle::default()
         }
     }

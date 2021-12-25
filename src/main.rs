@@ -8,6 +8,7 @@ mod score;
 mod events;
 mod power_up;
 mod path;
+mod constants;
 
 use bevy::{
     prelude::*,
@@ -23,7 +24,6 @@ use ghost::{
     Caleb,
     CalebBundle, 
     CalebMaterials,
-    CalebPathChangeTimer, 
     Harris, 
     HarrisMaterials,
     HarrisBundle, 
@@ -38,7 +38,7 @@ use ghost::{
 };
 use board::{Board, BoardTile};
 use ben::{Ben, BenBundle, BenAnimationTimer, BenSpeed, BenDirection, BenNextDirection, BenMaterials};
-use enums::{Direction, GameState, Label};
+use enums::{Direction, GameState, Label, CollisionType};
 use dot::{Dot, DotBundle};
 use score::{Score, ScoreBundle, PointValues};
 use events::{BenDirectionChangedEvent, PowerUpConsumedEvent};
@@ -91,19 +91,17 @@ fn main() {
                 .with_system(ben_movement_system.system().label(Label::BenMovementSystem).after(Label::BenControllerSystem))
                 .with_system(ben_dot_collision_system.system().after(Label::BenMovementSystem))
                 .with_system(ben_power_up_collision_system.system().after(Label::BenMovementSystem)) 
-                .with_system(ben_ghost_collision_system.system().after(Label::BenMovementSystem))
+                .with_system(ben_ghost_collision_system.system().label(Label::BenGhostCollisionSystem).after(Label::BenMovementSystem))
                 .with_system(ben_animation_system.system())
                 .with_system(scare_ghosts_system.system())
-                .with_system(caleb_movement_system.system())
-                .with_system(harris_movement_system.system())
-                .with_system(claflin_movement_system.system())
-                .with_system(samson_movement_system.system())
+                .with_system(ghost_movement_system.system())
                 .with_system(caleb_animation_system.system())
                 .with_system(harris_animation_system.system())
                 .with_system(claflin_animation_system.system())
                 .with_system(samson_animation_system.system())
                 .with_system(win_system.system())
                 .with_system(ghost_release_system.system())
+                .with_system(ghost_respawn_system.system().after(Label::BenGhostCollisionSystem))
         )
 
         // Miscellaneous
@@ -519,29 +517,38 @@ fn ben_power_up_collision_system(
 }
 
 fn ben_ghost_collision_system(
-    mut commands: Commands,
     mut game_state: ResMut<State<GameState>>,
     mut query_set: QuerySet<(
         Query<&Transform, With<Ben>>,
-        Query<(Entity, &Transform, &AttackState), With<Ghost>>,
+        Query<(&Transform, &AttackState, &mut ReleaseState, &mut GhostPath), With<Ghost>>,
         Query<&mut Score>
     )>,
     board: Res<Board>,
     point_values: Res<PointValues>,
 ) {
     let ben_transform = query_set.q0().single().unwrap().clone();
-    for (ghost_entity, ghost_transform, attack_state) in query_set.q1().iter() {
-        if utils::did_collide(ghost_transform, &ben_transform, &board) {
+    let mut points = 0;
+    for (ghost_transform, attack_state, mut release_state, mut ghost_path) in query_set.q1_mut().iter_mut() {
+        if utils::did_collide(ghost_transform, &ben_transform, &board, CollisionType::Approximate) {
             match attack_state {
                 AttackState::Attacking => {
                     game_state.set(GameState::Lose).unwrap();
                 },
                 AttackState::Scared => {
-                    println!("Ghost dies")
+                    if *release_state == ReleaseState::Respawning {
+                        continue;
+                    }
+
+                    *release_state = ReleaseState::Respawning;
+                    points += point_values.first_ghost;
+                    ghost_path.0.clear();
                 }
             }
         }
     }
+
+    let score = &mut query_set.q2_mut().single_mut().unwrap();
+    score.0 += points;
 }
 
 fn power_up_animation_system(
@@ -603,58 +610,32 @@ fn scare_ghosts_system(
     }
 }
 
-fn caleb_movement_system(
+fn ghost_movement_system(
     mut query_set: QuerySet<(
-        Query<(&mut Transform, &mut CalebPathChangeTimer, &mut GhostPath, &GhostSpeed), With<Caleb>>,
+        Query<(&mut Transform, &mut GhostPath, &GhostSpeed, &ReleaseState), With<Ghost>>,
         Query<&Transform, With<Ben>>
     )>,
     board: Res<Board>,
-    time: Res<Time>
 ) {
     let ben_transform = query_set.q1().single().unwrap().clone(); 
-    let (
-        mut caleb_transform, 
-        mut caleb_path_change_timer, 
-        mut ghost_path, 
-        ghost_speed
-    ) = query_set.q0_mut().single_mut().unwrap(); 
+    for (mut caleb_transform, mut ghost_path, ghost_speed, release_state) in query_set.q0_mut().iter_mut() {
+        if *release_state != ReleaseState::Released {
+            continue; 
+        }
 
-    if let Some((x, y)) = ghost_path.0.pop() {
-        caleb_transform.translation.x = x;
-        caleb_transform.translation.y = y;
+        if let Some((x, y)) = ghost_path.0.pop_front() {
+            caleb_transform.translation.x = x;
+            caleb_transform.translation.y = y;
+        } else {
+            ghost_path.0 = Path::shortest_to_transform(
+                &caleb_transform, 
+                &ben_transform, 
+                &board, 
+                ghost_speed.0, 
+                CollisionType::Approximate
+            );
+        }
     }
-
-    let timer = &mut caleb_path_change_timer.0;
-    timer.tick(time.delta());
-    if !(timer.finished()) {
-        return;
-    }
-
-    ghost_path.0 = Path::shortest_to_transform(&caleb_transform, &ben_transform, &board, ghost_speed.0);
-}
-
-fn harris_movement_system(
-    mut query: Query<(&mut Transform), With<Harris>>,
-    board: Res<Board>
-) {
-    // TODO: Implement
-    let harris_transform = query.single_mut().unwrap();
-}
-
-fn claflin_movement_system(
-    mut query: Query<(&mut Transform), With<Claflin>>,
-    board: Res<Board>
-) {
-    // TODO: Implement
-    let claflin_transform = query.single_mut().unwrap();
-}
-
-fn samson_movement_system(
-    mut query: Query<(&mut Transform), With<Samson>>,
-    board: Res<Board>
-) {
-    // TODO: Implement
-    let samson_transform = query.single_mut().unwrap();
 }
 
 fn caleb_animation_system(
@@ -662,10 +643,9 @@ fn caleb_animation_system(
     caleb_materials: Res<CalebMaterials>
 ) {
     let (mut material_handle, attack_state) = query.single_mut().unwrap();
-    material_handle.id = match attack_state {
-        AttackState::Attacking => caleb_materials.default_material.id,
-        AttackState::Scared => caleb_materials.scared_material.id,
-        _ => caleb_materials.default_material.id
+    *material_handle = match attack_state {
+        AttackState::Attacking => caleb_materials.default_material.clone(),
+        AttackState::Scared => caleb_materials.scared_material.clone(),
     };
 }
 
@@ -674,10 +654,9 @@ fn harris_animation_system(
     harris_materials: Res<HarrisMaterials>
 ) {
     let (mut material_handle, attack_state) = query.single_mut().unwrap();
-    material_handle.id = match attack_state {
-        AttackState::Attacking => harris_materials.default_material.id,
-        AttackState::Scared => harris_materials.scared_material.id,
-        _ => harris_materials.default_material.id
+    *material_handle = match attack_state {
+        AttackState::Attacking => harris_materials.default_material.clone(),
+        AttackState::Scared => harris_materials.scared_material.clone(),
     };
 }
 
@@ -686,10 +665,9 @@ fn claflin_animation_system(
     claflin_materials: Res<ClaflinMaterials>
 ) {
     let (mut material_handle, attack_state) = query.single_mut().unwrap();
-    material_handle.id = match attack_state {
-        AttackState::Attacking => claflin_materials.default_material.id,
-        AttackState::Scared => claflin_materials.scared_material.id,
-        _ => claflin_materials.default_material.id
+    *material_handle = match attack_state {
+        AttackState::Attacking => claflin_materials.default_material.clone(),
+        AttackState::Scared => claflin_materials.scared_material.clone(),
     };
 }
 
@@ -698,10 +676,9 @@ fn samson_animation_system(
     samson_materials: Res<SamsonMaterials>
 ) {
     let (mut material_handle, attack_state) = query.single_mut().unwrap();
-    material_handle.id = match attack_state {
-        AttackState::Attacking => samson_materials.default_material.id,
-        AttackState::Scared => samson_materials.scared_material.id,
-        _ => samson_materials.default_material.id
+    *material_handle = match attack_state {
+        AttackState::Attacking => samson_materials.default_material.clone(),
+        AttackState::Scared => samson_materials.scared_material.clone(),
     };
 }
 
@@ -810,6 +787,31 @@ pub fn ghost_release_system(
                 }
             },
             _ => continue
+        }
+    }
+}
+
+fn ghost_respawn_system(
+    mut query: Query<(&mut Transform, &mut ReleaseState, &mut GhostPath, &mut AttackState), With<Ghost>>,
+    board: Res<Board>
+) {
+    for (mut transform, mut release_state, mut ghost_path, mut attack_state) in query.iter_mut() {
+        if *release_state != ReleaseState::Respawning {
+            continue;
+        }
+
+        if let Some((x, y)) = ghost_path.0.pop_front() {
+            let (target_x, target_y) = utils::get_ghost_spawn_coordinates(&board);
+            transform.translation.x = x;
+            transform.translation.y = y;
+
+            if transform.translation.x == target_x && transform.translation.y == target_y {
+                *release_state = ReleaseState::Caged;
+                *attack_state = AttackState::Attacking;
+            }
+        }
+        else {
+            ghost_path.0 = Path::shortest_to_ghost_spawn(&transform, &board, constants::GHOST_SPEED_RESPAWNING);
         }
     }
 }
