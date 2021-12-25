@@ -35,6 +35,7 @@ use ghost::{
     SamsonBundle,
     GhostScareTimer,
     GhostReleaseTimer,
+    GhostChain
 };
 use board::{Board, BoardTile};
 use ben::{Ben, BenBundle, BenAnimationTimer, BenSpeed, BenDirection, BenNextDirection, BenMaterials};
@@ -44,6 +45,14 @@ use score::{Score, ScoreBundle, PointValues};
 use events::{BenDirectionChangedEvent, PowerUpConsumedEvent};
 use power_up::{PowerUp, PowerUpBundle, PowerUpMaterials, PowerUpAnimationTimer};
 use path::Path;
+
+struct SoundMaterials {
+    background_sound: Handle<AudioSource>,
+    slurp_sound: Handle<AudioSource>,
+    death_sound: Handle<AudioSource>
+}
+
+struct BackgroundMusicTimer(Timer);
 
 struct FontMaterial {
     handle: Handle<Font>
@@ -67,6 +76,7 @@ fn main() {
         .init_resource::<PointValues>()
         .init_resource::<GhostScareTimer>()
         .init_resource::<GhostReleaseTimer>()
+        .init_resource::<GhostChain>()
 
         // Events
         .add_event::<BenDirectionChangedEvent>()
@@ -107,6 +117,7 @@ fn main() {
         // Miscellaneous
         .add_system(power_up_animation_system.system())
         .add_system(score_system.system())
+        .add_system(background_music_system.system())
         
         // Plugins
         .add_plugins(DefaultPlugins)
@@ -339,6 +350,16 @@ fn setup(
     })
     .insert(StartMessage);
     commands.insert_resource(font_material);
+
+    // Sounds
+    commands.insert_resource(SoundMaterials {
+        background_sound: asset_server.load("../assets/sounds/guts_theme.mp3"),
+        slurp_sound: asset_server.load("../assets/sounds/slurp.mp3"),
+        death_sound: asset_server.load("../assets/sounds/cringe.mp3")
+    });
+
+    // Background music timer
+    commands.insert_resource(BackgroundMusicTimer(Timer::from_seconds(215., false)));
 }
 
 fn wait_for_asset_load_system(
@@ -500,8 +521,11 @@ fn ben_power_up_collision_system(
         Query<&mut Score>
     )>,
     mut power_up_consumed_event: EventWriter<PowerUpConsumedEvent>,
+    mut ghost_chain: ResMut<GhostChain>,
     board: Res<Board>,
     point_values: Res<PointValues>,
+    sound_materials: Res<SoundMaterials>,
+    audio: Res<Audio>
 ) {
     let ben_transform = query_set.q0().single().unwrap().clone();
     if utils::is_centered_horizontally(&ben_transform, &board) && utils::is_centered_vertically(&ben_transform, &board) {
@@ -509,7 +533,9 @@ fn ben_power_up_collision_system(
             if power_up_transform.translation.x == ben_transform.translation.x && power_up_transform.translation.y == ben_transform.translation.y {
                 commands.entity(power_up_entity).despawn();
                 query_set.q2_mut().single_mut().unwrap().0 += point_values.power_up;
+                ghost_chain.0 = 0;
                 power_up_consumed_event.send(PowerUpConsumedEvent);
+                audio.play(sound_materials.slurp_sound.clone());
                 break;
             }
         }
@@ -523,8 +549,11 @@ fn ben_ghost_collision_system(
         Query<(&Transform, &AttackState, &mut ReleaseState, &mut GhostPath), With<Ghost>>,
         Query<&mut Score>
     )>,
+    mut ghost_chain: ResMut<GhostChain>,
     board: Res<Board>,
     point_values: Res<PointValues>,
+    sound_materials: Res<SoundMaterials>,
+    audio: Res<Audio>
 ) {
     let ben_transform = query_set.q0().single().unwrap().clone();
     let mut points = 0;
@@ -533,6 +562,7 @@ fn ben_ghost_collision_system(
             match attack_state {
                 AttackState::Attacking => {
                     game_state.set(GameState::Lose).unwrap();
+                    audio.play(sound_materials.death_sound.clone())
                 },
                 AttackState::Scared => {
                     if *release_state == ReleaseState::Respawning {
@@ -540,7 +570,14 @@ fn ben_ghost_collision_system(
                     }
 
                     *release_state = ReleaseState::Respawning;
-                    points += point_values.first_ghost;
+                    points += match ghost_chain.0 {
+                        0 => point_values.first_ghost,
+                        1 => point_values.second_ghost,
+                        2 => point_values.third_ghost,
+                        3 => point_values.fourth_ghost,
+                        _ => point_values.fourth_ghost
+                    };
+                    ghost_chain.0 += 1;
                     ghost_path.0.clear();
                 }
             }
@@ -822,6 +859,23 @@ fn ghost_respawn_system(
 
             ghost_path.0 = Path::shortest_to_ghost_spawn(&transform, &board, constants::GHOST_SPEED_RESPAWNING);
         }
+    }
+}
+
+fn background_music_system(
+    mut background_music_timer: ResMut<BackgroundMusicTimer>,
+    sound_materials: Res<SoundMaterials>,
+    audio: Res<Audio>,
+    time: Res<Time>
+) {
+    let timer = &mut background_music_timer.0;
+    if timer.elapsed_secs() == 0. {
+        audio.play(sound_materials.background_sound.clone());
+    }
+
+    timer.tick(time.delta());
+    if timer.finished() {
+        timer.reset()
     }
 }
 

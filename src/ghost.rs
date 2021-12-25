@@ -38,6 +38,14 @@ impl Default for GhostReleaseTimer {
     }
 }
 
+pub struct GhostChain(pub u8);
+
+impl Default for GhostChain {
+    fn default() -> Self {
+        Self(0)
+    }
+}
+
 #[derive(Bundle)]
 pub struct GhostBundle {
     pub ghost: Ghost,
