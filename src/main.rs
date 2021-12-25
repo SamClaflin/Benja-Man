@@ -811,6 +811,15 @@ fn ghost_respawn_system(
             }
         }
         else {
+            // Hack to ensure that the ghost is centered on a tile before searching for a path to the spawn point.
+            // This is required to prevent the ghost from never finding a path.
+            if !utils::is_centered_horizontally(&transform, &board) {
+                transform.translation.x -= transform.translation.x % board.cell_size();
+            } 
+            if !utils::is_centered_vertically(&transform, &board) {
+                transform.translation.y -= transform.translation.y % board.cell_size();
+            }
+
             ghost_path.0 = Path::shortest_to_ghost_spawn(&transform, &board, constants::GHOST_SPEED_RESPAWNING);
         }
     }
