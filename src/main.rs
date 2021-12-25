@@ -150,7 +150,7 @@ fn setup(
     });
 
     // Board
-    let board_material_handle = materials.add(asset_server.load("../assets/board.png").into());
+    let board_material_handle = materials.add(asset_server.load("board.png").into());
     commands.spawn_bundle(SpriteBundle {
         material: board_material_handle.clone(),
         transform: Transform {
@@ -162,11 +162,11 @@ fn setup(
 
     // Dots and power-ups
     let dot_material = DotMaterial {
-        handle: materials.add(asset_server.load("../assets/cookie.png").into())
+        handle: materials.add(asset_server.load("cookie.png").into())
     };
     let power_up_materials = PowerUpMaterials {
-        material_1: materials.add(asset_server.load("../assets/arizona_1.png").into()),
-        material_2: materials.add(asset_server.load("../assets/arizona_2.png").into()),
+        material_1: materials.add(asset_server.load("arizona_1.png").into()),
+        material_2: materials.add(asset_server.load("arizona_2.png").into()),
     };
     utils::init_dots_and_power_ups(&mut commands, &board, dot_material.handle.clone(), power_up_materials.material_1.clone());
     commands.insert_resource(dot_material);
@@ -174,11 +174,11 @@ fn setup(
 
     // Ben
     let ben_materials = BenMaterials {
-        ben_default: materials.add(asset_server.load("../assets/ben/ben.png").into()),
-        ben_up: materials.add(asset_server.load("../assets/ben/ben_up.png").into()),
-        ben_right: materials.add(asset_server.load("../assets/ben/ben_right.png").into()),
-        ben_down: materials.add(asset_server.load("../assets/ben/ben_down.png").into()),
-        ben_left: materials.add(asset_server.load("../assets/ben/ben_left.png").into()),
+        ben_default: materials.add(asset_server.load("ben/ben.png").into()),
+        ben_up: materials.add(asset_server.load("ben/ben_up.png").into()),
+        ben_right: materials.add(asset_server.load("ben/ben_right.png").into()),
+        ben_down: materials.add(asset_server.load("ben/ben_down.png").into()),
+        ben_left: materials.add(asset_server.load("ben/ben_left.png").into()),
     };
     let (ben_init_x, ben_init_y) = utils::get_ben_spawn_coordinates(&board);
     commands.spawn_bundle(BenBundle {
@@ -197,8 +197,8 @@ fn setup(
 
     // Caleb
     let caleb_materials = CalebMaterials {
-        default_material: materials.add(asset_server.load("../assets/ghosts/caleb.png").into()),
-        scared_material: materials.add(asset_server.load("../assets/ghosts/caleb_scared.png").into()),
+        default_material: materials.add(asset_server.load("ghosts/caleb.png").into()),
+        scared_material: materials.add(asset_server.load("ghosts/caleb_scared.png").into()),
     };
     let (caleb_init_x, caleb_init_y) = utils::get_caleb_spawn_coordinates(&board);
     commands.spawn_bundle(CalebBundle {
@@ -221,8 +221,8 @@ fn setup(
 
     // Harris 
     let harris_materials = HarrisMaterials {
-        default_material: materials.add(asset_server.load("../assets/ghosts/sam_h.png").into()),
-        scared_material: materials.add(asset_server.load("../assets/ghosts/sam_h_scared.png").into()),
+        default_material: materials.add(asset_server.load("ghosts/sam_h.png").into()),
+        scared_material: materials.add(asset_server.load("ghosts/sam_h_scared.png").into()),
     };
     let (harris_init_x, harris_init_y) = utils::get_harris_spawn_coordinates(&board);
     commands.spawn_bundle(HarrisBundle {
@@ -244,8 +244,8 @@ fn setup(
 
     // Claflin 
     let claflin_materials = ClaflinMaterials {
-        default_material: materials.add(asset_server.load("../assets/ghosts/sam_c.png").into()),
-        scared_material: materials.add(asset_server.load("../assets/ghosts/sam_c_scared.png").into()),
+        default_material: materials.add(asset_server.load("ghosts/sam_c.png").into()),
+        scared_material: materials.add(asset_server.load("ghosts/sam_c_scared.png").into()),
     };
     let (claflin_init_x, claflin_init_y) = utils::get_claflin_spawn_coordinates(&board);
     commands.spawn_bundle(ClaflinBundle {
@@ -267,8 +267,8 @@ fn setup(
 
     // Samson 
     let samson_materials = SamsonMaterials {
-        default_material: materials.add(asset_server.load("../assets/ghosts/samson.png").into()),
-        scared_material: materials.add(asset_server.load("../assets/ghosts/samson_scared.png").into()),
+        default_material: materials.add(asset_server.load("ghosts/samson.png").into()),
+        scared_material: materials.add(asset_server.load("ghosts/samson_scared.png").into()),
     };
     let (samson_init_x, samson_init_y) = utils::get_samson_spawn_coordinates(&board);
     commands.spawn_bundle(SamsonBundle {
@@ -290,7 +290,7 @@ fn setup(
 
     // Score and start message
     let font_material = misc::FontMaterial {
-        handle: asset_server.load("../assets/font.ttf")
+        handle: asset_server.load("font.ttf")
     };
     let font = font_material.handle.clone();
     let text_style = TextStyle {
@@ -317,13 +317,13 @@ fn setup(
 
     // Sounds
     commands.insert_resource(misc::SoundMaterials {
-        background_sound: asset_server.load("../assets/sounds/guts_theme.mp3"),
-        slurp_sound: asset_server.load("../assets/sounds/slurp.mp3"),
-        death_sound: asset_server.load("../assets/sounds/cringe.mp3")
+        background_sound: asset_server.load("sounds/guts_theme.mp3"),
+        slurp_sound: asset_server.load("sounds/slurp.mp3"),
+        death_sound: asset_server.load("sounds/cringe.mp3")
     });
 
     // Background music timer
-    commands.insert_resource(misc::BackgroundMusicTimer(Timer::from_seconds(215., false)));
+    commands.insert_resource(misc::BackgroundMusicTimer(Timer::from_seconds(constants::BACKGROUND_MUSIC_DURATION_SECONDS, false)));
 }
 
 fn wait_for_game_start(
