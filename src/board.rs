@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use crate::enums::Direction;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum BoardTile {
@@ -80,6 +81,10 @@ impl Board {
     pub fn try_get(&self, i: usize, j: usize) -> Option<BoardTile> {
         if self.indeces_valid(i, j) {
             Some(self.matrix[i][j])
+        } else if j == self.width() {
+            Some(self.matrix[i][0])
+        } else if j == 0 {
+            Some(self.matrix[i][self.width() - 1])
         } else {
             None
         }
@@ -112,6 +117,39 @@ impl Board {
         let i = ((self.offset - y) / self.cell_size + self.height() as f32 - 1.) as usize;
         let j = ((x - self.offset) / self.cell_size) as usize;
         (i, j)
+    }
+
+    pub fn get_coordinates(&self, x: f32, y: f32, direction: Direction, speed: f32) -> (f32, f32) {
+        match direction {
+            Direction::Up => {
+                let mut target_y = y + speed;
+                if target_y > self.height() as f32 * self.cell_size() {
+                    target_y = 0.;
+                }
+                (x, target_y)
+            },
+            Direction::Right => {
+                let mut target_x = x + speed;
+                if target_x > self.width() as f32 * self.cell_size() {
+                    target_x = 0.;
+                }
+                (target_x, y)
+            },
+            Direction::Down => {
+                let mut target_y = y - speed;
+                if target_y < 0. {
+                    target_y = self.width() as f32 * self.cell_size();
+                }
+                (x, target_y)
+            },
+            Direction::Left => {
+                let mut target_x = x - speed;
+                if target_x < 0. {
+                    target_x = self.width() as f32 * self.cell_size();
+                }
+                (target_x, y)
+            }
+        }
     }
 
     fn validate_indeces(&self, i: usize, j: usize) {

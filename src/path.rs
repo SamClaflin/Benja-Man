@@ -24,10 +24,11 @@ impl Path {
                 return;
             }
 
-            let up_position = (_initial_transform.translation.x, _initial_transform.translation.y + _speed);
-            let right_position = (_initial_transform.translation.x + _speed, _initial_transform.translation.y);
-            let down_position = (_initial_transform.translation.x, _initial_transform.translation.y - _speed);
-            let left_position = (_initial_transform.translation.x - _speed, _initial_transform.translation.y);
+            let up_position = _board.get_coordinates(_initial_transform.translation.x, _initial_transform.translation.y, Direction::Up, _speed);
+            let right_position = _board.get_coordinates(_initial_transform.translation.x, _initial_transform.translation.y, Direction::Right, _speed);
+            let down_position = _board.get_coordinates(_initial_transform.translation.x, _initial_transform.translation.y, Direction::Down, _speed);
+            let left_position = _board.get_coordinates(_initial_transform.translation.x, _initial_transform.translation.y, Direction::Left, _speed);
+
 
             let mut available_directions: Vec<Direction> = Vec::new();
             if utils::can_move_up(_initial_transform, &_board, _speed) && !_path.0.contains(&up_position) {

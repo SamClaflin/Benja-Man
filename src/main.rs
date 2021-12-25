@@ -439,28 +439,14 @@ fn ben_movement_system(
 
     // Perform the movement
     let direction = ben_direction.0;
-    match direction {
-        Direction::Up => {
-            if can_move_up {
-                transform.translation.y += speed;
-            }
-        },
-        Direction::Right => {
-            if can_move_right {
-                transform.translation.x += speed;
-            }
-        },
-        Direction::Down => {
-            if can_move_down {
-                transform.translation.y -= speed;
-            }
-        },
-        Direction::Left => {
-            if can_move_left {
-                transform.translation.x -= speed;
-            }
-        }
-    }
+    let (target_x, target_y) = board.get_coordinates(transform.translation.x, transform.translation.y, direction, speed);
+    if can_move_up && direction == Direction::Up
+    || can_move_right && direction == Direction::Right
+    || can_move_down && direction == Direction::Down
+    || can_move_left && direction == Direction::Left {
+        transform.translation.x = target_x;
+        transform.translation.y = target_y;
+    } 
 }
 
 fn ben_animation_system(
