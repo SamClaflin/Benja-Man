@@ -37,13 +37,13 @@ use ghost::{
     GhostReleaseTimer,
     GhostChain
 };
-use board::{Board, BoardTile};
+use board::Board;
 use ben::{Ben, BenBundle, BenAnimationTimer, BenSpeed, BenDirection, BenNextDirection, BenMaterials};
 use enums::{Direction, GameState, Label, CollisionType};
-use dot::{Dot, DotBundle};
+use dot::{Dot, DotMaterial};
 use score::{Score, ScoreBundle, PointValues};
 use events::{BenDirectionChangedEvent, PowerUpConsumedEvent};
-use power_up::{PowerUp, PowerUpBundle, PowerUpMaterials, PowerUpAnimationTimer};
+use power_up::{PowerUp, PowerUpMaterials, PowerUpAnimationTimer};
 use path::Path;
 
 struct SoundMaterials {
@@ -60,8 +60,20 @@ struct FontMaterial {
 
 struct StartMessage;
 
+struct RestartMessage;
+
+struct EndMessage;
+
+struct EndMessageText(String);
+
+impl Default for EndMessageText {
+    fn default() -> Self {
+        Self(String::new())
+    }
+}
+
 fn main() {
-    let board = Board::new(32., 16.);
+    let board = Board::new(constants::BOARD_CELL_SIZE, constants::BOARD_OFFSET);
 
     App::build()
         // Resources
@@ -77,21 +89,22 @@ fn main() {
         .init_resource::<GhostScareTimer>()
         .init_resource::<GhostReleaseTimer>()
         .init_resource::<GhostChain>()
+        .init_resource::<EndMessageText>()
 
         // Events
         .add_event::<BenDirectionChangedEvent>()
         .add_event::<PowerUpConsumedEvent>()
 
         // State
-        .add_state(GameState::InitialLoad)
+        .add_state(GameState::Wait)
 
         // Startup
         .add_startup_system(setup.system())
 
         // Game start
         .add_system_set(
-            SystemSet::on_update(GameState::InitialLoad)
-                .with_system(wait_for_asset_load_system.system())
+            SystemSet::on_update(GameState::Wait)
+                .with_system(wait_for_game_start.system())
         )
 
         // Mainloop
@@ -112,6 +125,28 @@ fn main() {
                 .with_system(win_system.system())
                 .with_system(ghost_release_system.system())
                 .with_system(ghost_respawn_system.system().after(Label::BenGhostCollisionSystem))
+        )
+
+        // Game end
+        .add_system_set(
+            SystemSet::on_update(GameState::End)
+                .with_system(display_end_message_system.system().before(Label::WaitForRestartSystem))
+                .with_system(wait_for_restart_system.system().label(Label::WaitForRestartSystem))
+        )
+
+        // Restart game
+        .add_system_set(
+            SystemSet::on_enter(GameState::Reset)
+                .with_system(reset_score_system.system().before(Label::RestartGameSystem))
+                .with_system(reset_ben_system.system().before(Label::RestartGameSystem))
+                .with_system(reset_caleb_system.system().before(Label::RestartGameSystem))
+                .with_system(reset_harris_system.system().before(Label::RestartGameSystem))
+                .with_system(reset_claflin_system.system().before(Label::RestartGameSystem))
+                .with_system(reset_samson_system.system().before(Label::RestartGameSystem))
+                .with_system(reset_dots_and_power_ups_system.system().before(Label::RestartGameSystem))
+                .with_system(reset_ghost_release_timer.system().before(Label::RestartGameSystem))
+                .with_system(reset_end_message_text.system().before(Label::RestartGameSystem))
+                .with_system(restart_game_system.system().label(Label::RestartGameSystem))
         )
 
         // Miscellaneous
@@ -151,52 +186,18 @@ fn setup(
     });
 
     // Dots and power-ups
-    let dot_material_handle = materials.add(asset_server.load("../assets/cookie.png").into());
+    let dot_material = DotMaterial {
+        handle: materials.add(asset_server.load("../assets/cookie.png").into())
+    };
     let power_up_materials = PowerUpMaterials {
         material_1: materials.add(asset_server.load("../assets/arizona_1.png").into()),
         material_2: materials.add(asset_server.load("../assets/arizona_2.png").into()),
     };
-    for i in 0..board.height() {
-        for j in 0..board.width() {
-            let (x, y) = board.indeces_to_coordinates(i, j);
-            match board.try_get(i, j).unwrap() {
-                BoardTile::Dot => {
-                    commands.spawn_bundle(DotBundle {
-                        sprite_bundle: SpriteBundle {
-                            material: dot_material_handle.clone(),
-                            transform: Transform {
-                                translation: Vec3::new(x, y, 2.),
-                                scale: Vec3::new(1./12., 1./12., 1.),
-                                ..Default::default()
-                            },
-                            ..Default::default()
-                        },
-                        ..Default::default()
-                    });
-                },
-                BoardTile::PowerUp => {
-                    commands.spawn_bundle(PowerUpBundle {
-                        sprite_bundle: SpriteBundle {
-                            material: power_up_materials.material_1.clone(),
-                            transform: Transform {
-                                translation: Vec3::new(x, y, 2.),
-                                scale: Vec3::new(1./24., 1./24., 1.),
-                                ..Default::default()
-                            },
-                            ..Default::default()
-                        },
-                        ..Default::default()
-                    });
-                },
-                _ => continue
-            }
-        }
-    }
+    utils::init_dots_and_power_ups(&mut commands, &board, dot_material.handle.clone(), power_up_materials.material_1.clone());
+    commands.insert_resource(dot_material);
     commands.insert_resource(power_up_materials);
 
     // Ben
-    let ben_init_x = board.width() as f32 * board.cell_size() / 2.;
-    let (_, ben_init_y) = board.indeces_to_coordinates(23, 0);
     let ben_materials = BenMaterials {
         ben_default: materials.add(asset_server.load("../assets/ben/ben.png").into()),
         ben_up: materials.add(asset_server.load("../assets/ben/ben_up.png").into()),
@@ -204,6 +205,7 @@ fn setup(
         ben_down: materials.add(asset_server.load("../assets/ben/ben_down.png").into()),
         ben_left: materials.add(asset_server.load("../assets/ben/ben_left.png").into()),
     };
+    let (ben_init_x, ben_init_y) = utils::get_ben_spawn_coordinates(&board);
     commands.spawn_bundle(BenBundle {
         sprite_bundle: SpriteBundle {
             material: ben_materials.ben_default.clone(),
@@ -223,8 +225,7 @@ fn setup(
         default_material: materials.add(asset_server.load("../assets/ghosts/caleb.png").into()),
         scared_material: materials.add(asset_server.load("../assets/ghosts/caleb_scared.png").into()),
     };
-    let caleb_init_x = board.cell_size() * board.width() as f32 / 2.;
-    let (_, caleb_init_y) = board.indeces_to_coordinates(11, 0);
+    let (caleb_init_x, caleb_init_y) = utils::get_caleb_spawn_coordinates(&board);
     commands.spawn_bundle(CalebBundle {
         ghost_bundle: GhostBundle {
             sprite_bundle: SpriteBundle {
@@ -248,8 +249,7 @@ fn setup(
         default_material: materials.add(asset_server.load("../assets/ghosts/sam_h.png").into()),
         scared_material: materials.add(asset_server.load("../assets/ghosts/sam_h_scared.png").into()),
     };
-    let harris_init_x = board.cell_size() * board.width() as f32 / 2. - board.cell_size() * 2.;
-    let (_, harris_init_y) = board.indeces_to_coordinates(14, 0);
+    let (harris_init_x, harris_init_y) = utils::get_harris_spawn_coordinates(&board);
     commands.spawn_bundle(HarrisBundle {
         ghost_bundle: GhostBundle {
             sprite_bundle: SpriteBundle {
@@ -272,8 +272,7 @@ fn setup(
         default_material: materials.add(asset_server.load("../assets/ghosts/sam_c.png").into()),
         scared_material: materials.add(asset_server.load("../assets/ghosts/sam_c_scared.png").into()),
     };
-    let claflin_init_x = board.cell_size() * board.width() as f32 / 2.;
-    let (_, claflin_init_y) = board.indeces_to_coordinates(14, 0);
+    let (claflin_init_x, claflin_init_y) = utils::get_claflin_spawn_coordinates(&board);
     commands.spawn_bundle(ClaflinBundle {
         ghost_bundle: GhostBundle {
             sprite_bundle: SpriteBundle {
@@ -296,8 +295,7 @@ fn setup(
         default_material: materials.add(asset_server.load("../assets/ghosts/samson.png").into()),
         scared_material: materials.add(asset_server.load("../assets/ghosts/samson_scared.png").into()),
     };
-    let samson_init_x = board.cell_size() * board.width() as f32 / 2. + board.cell_size() * 2.;
-    let (_, samson_init_y) = board.indeces_to_coordinates(14, 0);
+    let (samson_init_x, samson_init_y) = utils::get_samson_spawn_coordinates(&board);
     commands.spawn_bundle(SamsonBundle {
         ghost_bundle: GhostBundle {
             sprite_bundle: SpriteBundle {
@@ -331,7 +329,7 @@ fn setup(
     };
     commands.spawn_bundle(ScoreBundle {
         text_bundle: Text2dBundle {
-            text: Text::with_section("", text_style.clone(), text_alignment),
+            text: Text::with_section("", text_style, text_alignment),
             transform: Transform {
                 translation: Vec3::new(board.width() as f32 * board.cell_size() / 2., board.height() as f32 * board.cell_size(), 10.),
                 ..Default::default()
@@ -340,15 +338,6 @@ fn setup(
         },
         ..Default::default()
     });
-    commands.spawn_bundle(Text2dBundle {
-        text: Text::with_section("Press space to start", text_style, text_alignment),
-        transform: Transform {
-            translation: Vec3::new(board.width() as f32 * board.cell_size() / 2., board.height() as f32 * board.cell_size() / 2. + 256., 15.),
-            ..Default::default()
-        },
-        ..Default::default()
-    })
-    .insert(StartMessage);
     commands.insert_resource(font_material);
 
     // Sounds
@@ -362,16 +351,44 @@ fn setup(
     commands.insert_resource(BackgroundMusicTimer(Timer::from_seconds(215., false)));
 }
 
-fn wait_for_asset_load_system(
+fn wait_for_game_start(
     mut commands: Commands,
     mut game_state: ResMut<State<GameState>>,
     query: Query<Entity, With<StartMessage>>,
-    keys: Res<Input<KeyCode>>
+    keys: Res<Input<KeyCode>>,
+    board: Res<Board>,
+    font_material: Res<FontMaterial>
 ) {
-    let start_message_entity = query.single().unwrap();
-    if keys.just_pressed(KeyCode::Space) {
-        commands.entity(start_message_entity).despawn();
-        game_state.set(GameState::Default).unwrap();
+    let mut start_message_exists = false;
+    for _ in query.iter() {
+        start_message_exists = true;
+    }
+
+    if !start_message_exists {
+        let text_style = TextStyle {
+            font: font_material.handle.clone(),
+            font_size: 35.,
+            color: Color::WHITE
+        };
+        let text_alignment = TextAlignment {
+            vertical: VerticalAlign::Center,
+            horizontal: HorizontalAlign::Center
+        };
+        commands.spawn_bundle(Text2dBundle {
+            text: Text::with_section("Press space to start", text_style, text_alignment),
+            transform: Transform {
+                translation: Vec3::new(board.width() as f32 * board.cell_size() / 2., board.height() as f32 * board.cell_size() / 2. + 256., 15.),
+                ..Default::default()
+            },
+            ..Default::default()
+        })
+        .insert(StartMessage);
+    } else {
+        let start_message_entity = query.single().unwrap();
+        if keys.just_pressed(KeyCode::Space) {
+            commands.entity(start_message_entity).despawn();
+            game_state.set(GameState::Default).unwrap();
+        }
     }
 }
 
@@ -459,7 +476,7 @@ fn ben_animation_system(
 
     // Always update the sprite if the direction was just changed
     for event in event_direction_changed.iter() {
-        update_ben_sprite(&mut material_handle, event.0, &ben_materials);
+        utils::update_ben_sprite(&mut material_handle, event.0, &ben_materials);
         return;
     }
 
@@ -473,7 +490,7 @@ fn ben_animation_system(
     if material_handle.id != ben_materials.ben_default.id {
         *material_handle = ben_materials.ben_default.clone();
     } else {
-        update_ben_sprite(&mut material_handle, ben_direction.0, &ben_materials);
+        utils::update_ben_sprite(&mut material_handle, ben_direction.0, &ben_materials);
     }
 }
 
@@ -536,6 +553,7 @@ fn ben_ghost_collision_system(
         Query<&mut Score>
     )>,
     mut ghost_chain: ResMut<GhostChain>,
+    mut end_message_text: ResMut<EndMessageText>,
     board: Res<Board>,
     point_values: Res<PointValues>,
     sound_materials: Res<SoundMaterials>,
@@ -547,7 +565,8 @@ fn ben_ghost_collision_system(
         if utils::did_collide(ghost_transform, &ben_transform, &board, CollisionType::Approximate) {
             match attack_state {
                 AttackState::Attacking => {
-                    game_state.set(GameState::Lose).unwrap();
+                    game_state.set(GameState::End).unwrap();
+                    end_message_text.0 = "Fat And\nImmeasurably Cringe".to_string();
                     audio.play(sound_materials.death_sound.clone())
                 },
                 AttackState::Scared => {
@@ -560,7 +579,6 @@ fn ben_ghost_collision_system(
                         0 => point_values.first_ghost,
                         1 => point_values.second_ghost,
                         2 => point_values.third_ghost,
-                        3 => point_values.fourth_ghost,
                         _ => point_values.fourth_ghost
                     };
                     ghost_chain.0 += 1;
@@ -713,11 +731,9 @@ fn score_system(
 }
 
 fn win_system(
-    mut commands: Commands,
     mut game_state: ResMut<State<GameState>>,
+    mut end_message_text: ResMut<EndMessageText>,
     query: Query<&Dot>,
-    board: Res<Board>,
-    font_material: Res<FontMaterial>
 ) {
     let mut did_win = true;
     for _ in query.iter() {
@@ -726,28 +742,12 @@ fn win_system(
     }
 
     if did_win {
-        game_state.set(GameState::Win).unwrap();
-        let text_style = TextStyle {
-            font: font_material.handle.clone(),
-            font_size: 35.,
-            color: Color::WHITE
-        };
-        let text_alignment = TextAlignment {
-            vertical: VerticalAlign::Center,
-            horizontal: HorizontalAlign::Center
-        };
-        commands.spawn_bundle(Text2dBundle {
-            text: Text::with_section("Based\nAND\nRed-Pilled", text_style, text_alignment),
-            transform: Transform {
-                translation: Vec3::new(board.width() as f32 * board.cell_size() / 2., board.height() as f32 * board.cell_size() / 2., 15.),
-                ..Default::default()
-            },
-            ..Default::default()
-        });
+        game_state.set(GameState::End).unwrap();
+        end_message_text.0 = "Based\nAND\nRed-Pilled".to_string();
     }
 }
 
-pub fn ghost_release_system(
+fn ghost_release_system(
     mut ghost_release_timer: ResMut<GhostReleaseTimer>,
     mut query: Query<(&mut ReleaseState, &mut Transform, &GhostSpeed), With<Ghost>>,
     board: Res<Board>,
@@ -865,15 +865,239 @@ fn background_music_system(
     }
 }
 
-fn update_ben_sprite(
-    material_handle: &mut Handle<ColorMaterial>,
-    direction: Direction,
-    ben_materials: &BenMaterials
+fn reset_score_system(
+    mut query: Query<&mut Score>
 ) {
-    *material_handle = match direction {
-        Direction::Up => ben_materials.ben_up.clone(),
-        Direction::Right => ben_materials.ben_right.clone(), 
-        Direction::Down => ben_materials.ben_down.clone(),
-        Direction::Left => ben_materials.ben_left.clone(),
-    };
+    let mut score = query.single_mut().unwrap();
+    score.0 = 0;
+}
+
+fn reset_ben_system(
+    mut query: Query<(&mut Transform, &mut BenDirection, &mut Handle<ColorMaterial>), With<Ben>>,
+    board: Res<Board>,
+    ben_materials: Res<BenMaterials>
+) {
+    let (mut transform, mut ben_direction, mut material_handle) = query.single_mut().unwrap();
+
+    // Position
+    let (x, y) = utils::get_ben_spawn_coordinates(&board);
+    transform.translation.x = x;
+    transform.translation.y = y;
+
+    // Direction
+    ben_direction.0 = constants::BEN_DIRECTION_DEFAULT;
+
+    // Sprite
+    *material_handle = ben_materials.ben_default.clone();
+}
+
+fn reset_caleb_system(
+    mut query: Query<(&mut Transform, &mut AttackState, &mut ReleaseState, &mut GhostPath, &mut Handle<ColorMaterial>), With<Caleb>>,
+    board: Res<Board>,
+    caleb_materials: Res<CalebMaterials>
+) {
+    let (mut transform, mut attack_state, mut release_state, mut ghost_path, mut material_handle) = query.single_mut().unwrap();
+
+    // Position
+    let (x, y) = utils::get_caleb_spawn_coordinates(&board);
+    transform.translation.x = x;
+    transform.translation.y = y;
+
+    // States
+    *attack_state = AttackState::Attacking;
+    *release_state = ReleaseState::Released;
+
+    // Path
+    ghost_path.0.clear();
+
+    // Sprite
+    *material_handle = caleb_materials.default_material.clone(); 
+}
+
+fn reset_harris_system(
+    mut query: Query<(&mut Transform, &mut AttackState, &mut ReleaseState, &mut GhostPath, &mut Handle<ColorMaterial>), With<Harris>>,
+    board: Res<Board>,
+    harris_materials: Res<HarrisMaterials>
+) {
+    let (mut transform, mut attack_state, mut release_state, mut ghost_path, mut material_handle) = query.single_mut().unwrap();
+
+    // Position
+    let (x, y) = utils::get_harris_spawn_coordinates(&board);
+    transform.translation.x = x;
+    transform.translation.y = y;
+
+    // States
+    *attack_state = AttackState::Attacking;
+    *release_state = ReleaseState::Caged;
+
+    // Path
+    ghost_path.0.clear();
+
+    // Sprite
+    *material_handle = harris_materials.default_material.clone();
+}
+
+fn reset_claflin_system(
+    mut query: Query<(&mut Transform, &mut AttackState, &mut ReleaseState, &mut GhostPath, &mut Handle<ColorMaterial>), With<Claflin>>,
+    board: Res<Board>,
+    claflin_materials: Res<ClaflinMaterials>
+) {
+    let (mut transform, mut attack_state, mut release_state, mut ghost_path, mut material_handle) = query.single_mut().unwrap();
+
+    // Position
+    let (x, y) = utils::get_claflin_spawn_coordinates(&board);
+    transform.translation.x = x;
+    transform.translation.y = y;
+
+    // States
+    *attack_state = AttackState::Attacking;
+    *release_state = ReleaseState::Caged;
+
+    // Path 
+    ghost_path.0.clear();
+
+    // Sprite
+    *material_handle = claflin_materials.default_material.clone();
+}
+
+fn reset_samson_system(
+    mut query: Query<(&mut Transform, &mut AttackState, &mut ReleaseState, &mut GhostPath, &mut Handle<ColorMaterial>), With<Samson>>,
+    board: Res<Board>,
+    samson_materials: Res<SamsonMaterials>
+) {
+    let (mut transform, mut attack_state, mut release_state, mut ghost_path, mut material_handle) = query.single_mut().unwrap();
+
+    // Position
+    let (x, y) = utils::get_samson_spawn_coordinates(&board);
+    transform.translation.x = x;
+    transform.translation.y = y;
+
+    // States
+    *attack_state = AttackState::Attacking;
+    *release_state = ReleaseState::Caged;
+
+    // Path
+    ghost_path.0.clear();
+
+    // Sprite
+    *material_handle = samson_materials.default_material.clone();
+}
+
+fn reset_dots_and_power_ups_system(
+    mut commands: Commands,
+    mut query_set: QuerySet<(
+        Query<Entity, With<Dot>>,
+        Query<Entity, With<PowerUp>>
+    )>,
+    board: Res<Board>,
+    dot_material: Res<DotMaterial>,
+    power_up_materials: Res<PowerUpMaterials>
+) {
+    // Despawn all dots
+    for dot_entity in query_set.q0_mut().iter_mut() {
+        commands.entity(dot_entity).despawn();
+    }
+
+    // Despawn all power-ups
+    for power_up_entity in query_set.q1_mut().iter_mut() {
+        commands.entity(power_up_entity).despawn();
+    }
+
+    // Re-initialize all dots and power ups
+    utils::init_dots_and_power_ups(&mut commands, &board, dot_material.handle.clone(), power_up_materials.material_1.clone());
+}
+
+fn reset_ghost_release_timer(
+    mut ghost_release_timer: ResMut<GhostReleaseTimer>
+) {
+    ghost_release_timer.0.reset();
+}
+
+fn reset_end_message_text(
+    mut commands: Commands,
+    query: Query<Entity, With<EndMessage>>
+) {
+    let end_message_entity = query.single().unwrap();
+    commands.entity(end_message_entity).despawn()
+}
+
+fn restart_game_system(
+    mut game_state: ResMut<State<GameState>>
+) {
+    game_state.set(GameState::Default).unwrap();
+}
+
+fn wait_for_restart_system(
+    mut commands: Commands,
+    mut game_state: ResMut<State<GameState>>,
+    query: Query<Entity, With<RestartMessage>>,
+    font_material: Res<FontMaterial>,
+    keys: Res<Input<KeyCode>>,
+    board: Res<Board>
+) {
+    let mut restart_message_exists = false;
+    for _ in query.iter() {
+        restart_message_exists = true;
+    }
+
+    if !restart_message_exists {
+        let text_style = TextStyle {
+            font: font_material.handle.clone(),
+            font_size: 35.,
+            color: Color::WHITE
+        };
+        let text_alignment = TextAlignment {
+            vertical: VerticalAlign::Center,
+            horizontal: HorizontalAlign::Center
+        };
+        commands.spawn_bundle(Text2dBundle {
+            text: Text::with_section("Press space to restart", text_style, text_alignment),
+            transform: Transform {
+                translation: Vec3::new(board.width() as f32 * board.cell_size() / 2., board.height() as f32 * board.cell_size() / 2. + 256., 15.),
+                ..Default::default()
+            },
+            ..Default::default()
+        })
+        .insert(RestartMessage);
+    } else {
+        if keys.just_pressed(KeyCode::Space) {
+            let restart_message_entity = query.single().unwrap();
+            commands.entity(restart_message_entity).despawn();
+            game_state.set(GameState::Reset).unwrap();
+        }
+    }
+}
+
+fn display_end_message_system(
+    mut commands: Commands,
+    query: Query<Entity, With<EndMessage>>,
+    end_message_text: Res<EndMessageText>,
+    font_material: Res<FontMaterial>,
+    board: Res<Board>
+) {
+    let mut end_message_exists = false;
+    for _ in query.iter() {
+        end_message_exists = true;
+    }
+
+    if !end_message_exists {
+        let text_style = TextStyle {
+            font: font_material.handle.clone(),
+            font_size: 35.,
+            color: Color::WHITE
+        };
+        let text_alignment = TextAlignment {
+            vertical: VerticalAlign::Center,
+            horizontal: HorizontalAlign::Center
+        };
+        commands.spawn_bundle(Text2dBundle {
+            text: Text::with_section(end_message_text.0.as_str(), text_style, text_alignment),
+            transform: Transform {
+                translation: Vec3::new(board.width() as f32 * board.cell_size() / 2., board.height() as f32 * board.cell_size() / 2., 15.),
+                ..Default::default()
+            },
+            ..Default::default()
+        })
+        .insert(EndMessage);
+    }
 }

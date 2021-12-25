@@ -1,5 +1,9 @@
 use bevy::prelude::*;
 
+pub struct DotMaterial {
+    pub handle: Handle<ColorMaterial>
+}
+
 pub struct Dot;
 
 #[derive(Bundle)]

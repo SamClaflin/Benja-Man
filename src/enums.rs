@@ -12,15 +12,17 @@ pub enum Direction {
 pub enum Label {
     BenControllerSystem,
     BenMovementSystem,
-    BenGhostCollisionSystem
+    BenGhostCollisionSystem,
+    RestartGameSystem,
+    WaitForRestartSystem
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum GameState {
-    InitialLoad,
+    Wait,
     Default,
-    Win,
-    Lose
+    End,
+    Reset
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
