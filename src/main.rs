@@ -9,6 +9,7 @@ mod events;
 mod power_up;
 mod path;
 mod constants;
+mod misc;
 
 use bevy::{
     prelude::*,
@@ -46,32 +47,6 @@ use events::{BenDirectionChangedEvent, PowerUpConsumedEvent};
 use power_up::{PowerUp, PowerUpMaterials, PowerUpAnimationTimer};
 use path::Path;
 
-struct SoundMaterials {
-    background_sound: Handle<AudioSource>,
-    slurp_sound: Handle<AudioSource>,
-    death_sound: Handle<AudioSource>
-}
-
-struct BackgroundMusicTimer(Timer);
-
-struct FontMaterial {
-    handle: Handle<Font>
-}
-
-struct StartMessage;
-
-struct RestartMessage;
-
-struct EndMessage;
-
-struct EndMessageText(String);
-
-impl Default for EndMessageText {
-    fn default() -> Self {
-        Self(String::new())
-    }
-}
-
 fn main() {
     let board = Board::new(constants::BOARD_CELL_SIZE, constants::BOARD_OFFSET);
 
@@ -89,7 +64,7 @@ fn main() {
         .init_resource::<GhostScareTimer>()
         .init_resource::<GhostReleaseTimer>()
         .init_resource::<GhostChain>()
-        .init_resource::<EndMessageText>()
+        .init_resource::<misc::EndMessageText>()
 
         // Events
         .add_event::<BenDirectionChangedEvent>()
@@ -314,7 +289,7 @@ fn setup(
     commands.insert_resource(samson_materials);
 
     // Score and start message
-    let font_material = FontMaterial {
+    let font_material = misc::FontMaterial {
         handle: asset_server.load("../assets/font.ttf")
     };
     let font = font_material.handle.clone();
@@ -341,23 +316,23 @@ fn setup(
     commands.insert_resource(font_material);
 
     // Sounds
-    commands.insert_resource(SoundMaterials {
+    commands.insert_resource(misc::SoundMaterials {
         background_sound: asset_server.load("../assets/sounds/guts_theme.mp3"),
         slurp_sound: asset_server.load("../assets/sounds/slurp.mp3"),
         death_sound: asset_server.load("../assets/sounds/cringe.mp3")
     });
 
     // Background music timer
-    commands.insert_resource(BackgroundMusicTimer(Timer::from_seconds(215., false)));
+    commands.insert_resource(misc::BackgroundMusicTimer(Timer::from_seconds(215., false)));
 }
 
 fn wait_for_game_start(
     mut commands: Commands,
     mut game_state: ResMut<State<GameState>>,
-    query: Query<Entity, With<StartMessage>>,
+    query: Query<Entity, With<misc::StartMessage>>,
     keys: Res<Input<KeyCode>>,
     board: Res<Board>,
-    font_material: Res<FontMaterial>
+    font_material: Res<misc::FontMaterial>
 ) {
     let mut start_message_exists = false;
     for _ in query.iter() {
@@ -382,7 +357,7 @@ fn wait_for_game_start(
             },
             ..Default::default()
         })
-        .insert(StartMessage);
+        .insert(misc::StartMessage);
     } else {
         let start_message_entity = query.single().unwrap();
         if keys.just_pressed(KeyCode::Space) {
@@ -527,7 +502,7 @@ fn ben_power_up_collision_system(
     mut ghost_chain: ResMut<GhostChain>,
     board: Res<Board>,
     point_values: Res<PointValues>,
-    sound_materials: Res<SoundMaterials>,
+    sound_materials: Res<misc::SoundMaterials>,
     audio: Res<Audio>
 ) {
     let ben_transform = query_set.q0().single().unwrap().clone();
@@ -553,10 +528,10 @@ fn ben_ghost_collision_system(
         Query<&mut Score>
     )>,
     mut ghost_chain: ResMut<GhostChain>,
-    mut end_message_text: ResMut<EndMessageText>,
+    mut end_message_text: ResMut<misc::EndMessageText>,
     board: Res<Board>,
     point_values: Res<PointValues>,
-    sound_materials: Res<SoundMaterials>,
+    sound_materials: Res<misc::SoundMaterials>,
     audio: Res<Audio>
 ) {
     let ben_transform = query_set.q0().single().unwrap().clone();
@@ -732,7 +707,7 @@ fn score_system(
 
 fn win_system(
     mut game_state: ResMut<State<GameState>>,
-    mut end_message_text: ResMut<EndMessageText>,
+    mut end_message_text: ResMut<misc::EndMessageText>,
     query: Query<&Dot>,
 ) {
     let mut did_win = true;
@@ -849,8 +824,8 @@ fn ghost_respawn_system(
 }
 
 fn background_music_system(
-    mut background_music_timer: ResMut<BackgroundMusicTimer>,
-    sound_materials: Res<SoundMaterials>,
+    mut background_music_timer: ResMut<misc::BackgroundMusicTimer>,
+    sound_materials: Res<misc::SoundMaterials>,
     audio: Res<Audio>,
     time: Res<Time>
 ) {
@@ -1015,7 +990,7 @@ fn reset_ghost_release_timer(
 
 fn reset_end_message_text(
     mut commands: Commands,
-    query: Query<Entity, With<EndMessage>>
+    query: Query<Entity, With<misc::EndMessage>>
 ) {
     let end_message_entity = query.single().unwrap();
     commands.entity(end_message_entity).despawn()
@@ -1030,8 +1005,8 @@ fn restart_game_system(
 fn wait_for_restart_system(
     mut commands: Commands,
     mut game_state: ResMut<State<GameState>>,
-    query: Query<Entity, With<RestartMessage>>,
-    font_material: Res<FontMaterial>,
+    query: Query<Entity, With<misc::RestartMessage>>,
+    font_material: Res<misc::FontMaterial>,
     keys: Res<Input<KeyCode>>,
     board: Res<Board>
 ) {
@@ -1058,7 +1033,7 @@ fn wait_for_restart_system(
             },
             ..Default::default()
         })
-        .insert(RestartMessage);
+        .insert(misc::RestartMessage);
     } else {
         if keys.just_pressed(KeyCode::Space) {
             let restart_message_entity = query.single().unwrap();
@@ -1070,9 +1045,9 @@ fn wait_for_restart_system(
 
 fn display_end_message_system(
     mut commands: Commands,
-    query: Query<Entity, With<EndMessage>>,
-    end_message_text: Res<EndMessageText>,
-    font_material: Res<FontMaterial>,
+    query: Query<Entity, With<misc::EndMessage>>,
+    end_message_text: Res<misc::EndMessageText>,
+    font_material: Res<misc::FontMaterial>,
     board: Res<Board>
 ) {
     let mut end_message_exists = false;
@@ -1098,6 +1073,6 @@ fn display_end_message_system(
             },
             ..Default::default()
         })
-        .insert(EndMessage);
+        .insert(misc::EndMessage);
     }
 }
