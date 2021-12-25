@@ -14,7 +14,8 @@ pub enum Label {
     BenMovementSystem,
     BenGhostCollisionSystem,
     RestartGameSystem,
-    WaitForRestartSystem
+    WaitForRestartSystem,
+    ThrottleFramerateSystem
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]

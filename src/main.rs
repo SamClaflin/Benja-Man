@@ -11,6 +11,7 @@ mod path;
 mod constants;
 mod misc;
 
+use std::{thread, time};
 use bevy::{
     prelude::*,
     render::camera::{OrthographicProjection, WindowOrigin}
@@ -86,21 +87,22 @@ fn main() {
         // Mainloop
         .add_system_set(
             SystemSet::on_update(GameState::Default)
-                .with_system(ben_controller_system.system().label(Label::BenControllerSystem))
-                .with_system(ben_movement_system.system().label(Label::BenMovementSystem).after(Label::BenControllerSystem))
-                .with_system(ben_dot_collision_system.system().after(Label::BenMovementSystem))
-                .with_system(ben_power_up_collision_system.system().after(Label::BenMovementSystem)) 
-                .with_system(ben_ghost_collision_system.system().label(Label::BenGhostCollisionSystem).after(Label::BenMovementSystem))
-                .with_system(ben_animation_system.system())
-                .with_system(scare_ghosts_system.system())
-                .with_system(ghost_movement_system.system())
-                .with_system(caleb_animation_system.system())
-                .with_system(harris_animation_system.system())
-                .with_system(claflin_animation_system.system())
-                .with_system(samson_animation_system.system())
-                .with_system(win_system.system())
-                .with_system(ghost_release_system.system())
-                .with_system(ghost_respawn_system.system().after(Label::BenGhostCollisionSystem))
+                .with_system(ben_controller_system.system().label(Label::BenControllerSystem).before(Label::ThrottleFramerateSystem))
+                .with_system(ben_movement_system.system().label(Label::BenMovementSystem).after(Label::BenControllerSystem).before(Label::ThrottleFramerateSystem))
+                .with_system(ben_dot_collision_system.system().after(Label::BenMovementSystem).before(Label::ThrottleFramerateSystem))
+                .with_system(ben_power_up_collision_system.system().after(Label::BenMovementSystem).before(Label::ThrottleFramerateSystem)) 
+                .with_system(ben_ghost_collision_system.system().label(Label::BenGhostCollisionSystem).after(Label::BenMovementSystem).before(Label::ThrottleFramerateSystem))
+                .with_system(ben_animation_system.system().before(Label::ThrottleFramerateSystem))
+                .with_system(scare_ghosts_system.system().before(Label::ThrottleFramerateSystem))
+                .with_system(ghost_movement_system.system().before(Label::ThrottleFramerateSystem))
+                .with_system(caleb_animation_system.system().before(Label::ThrottleFramerateSystem))
+                .with_system(harris_animation_system.system().before(Label::ThrottleFramerateSystem))
+                .with_system(claflin_animation_system.system().before(Label::ThrottleFramerateSystem))
+                .with_system(samson_animation_system.system().before(Label::ThrottleFramerateSystem))
+                .with_system(win_system.system().before(Label::ThrottleFramerateSystem))
+                .with_system(ghost_release_system.system().before(Label::ThrottleFramerateSystem))
+                .with_system(ghost_respawn_system.system().after(Label::BenGhostCollisionSystem).before(Label::ThrottleFramerateSystem))
+                .with_system(throttle_framerate_system.system().label(Label::ThrottleFramerateSystem))
         )
 
         // Game end
@@ -1078,4 +1080,8 @@ fn display_end_message_system(
         })
         .insert(misc::EndMessage);
     }
+}
+
+fn throttle_framerate_system() {
+    thread::sleep(time::Duration::from_secs_f64(1./constants::MAX_FRAMERATE));
 }
